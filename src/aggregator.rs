@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 
 use petgraph::algo::{connected_components, is_cyclic_directed};
@@ -7,7 +7,7 @@ use petgraph::prelude::*;
 use petgraph::{Directed, Graph};
 use serde::Serialize;
 
-use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse};
+use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse, NodeAddressCluster};
 
 use crate::AggregatorError;
 
@@ -58,6 +58,7 @@ pub struct MessageGraphInfo {
     pub source_nodes: Vec<String>,
     pub graph_count: usize,
     pub is_graph_cyclic: bool,
+    pub missing_nodes: Vec<String>,
 }
 
 impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
@@ -112,6 +113,7 @@ impl CpnpBlockPublication {
 
 pub fn aggregate_first_receive(
     data: Vec<DebuggerCpnpResponse>,
+    nodes_in_cluster: HashSet<NodeAddressCluster>,
 ) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
@@ -221,12 +223,20 @@ pub fn aggregate_first_receive(
         let graph_count = connected_components(&block_data.graph);
         let is_graph_cyclic = is_cyclic_directed(&block_data.graph);
 
+        let missing_nodes = nodes_in_cluster
+            .clone()
+            .into_iter()
+            .filter(|node| !block_data.unique_nodes.contains_key(&node.ip()))
+            .map(|node| node.ip())
+            .collect();
+
         let info = MessageGraphInfo {
             node_count,
             source_node_count: source_nodes.len(),
             source_nodes,
             graph_count,
             is_graph_cyclic,
+            missing_nodes,
         };
 
         block_data.graph_info = Some(info);
@@ -259,7 +269,12 @@ pub fn aggregate_first_receive(
 fn get_source_nodes(graph: &MessageGraph) -> Vec<String> {
     let mut sources: Vec<String> = vec![];
     for node in graph.node_indices() {
-        if graph.edges_directed(node, Incoming).peekable().peek().is_none() {
+        if graph
+            .edges_directed(node, Incoming)
+            .peekable()
+            .peek()
+            .is_none()
+        {
             sources.push(graph.node_weight(node).unwrap().to_string());
         }
     }

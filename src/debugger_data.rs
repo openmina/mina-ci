@@ -3,6 +3,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NodeAddress(String);
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash)]
+pub struct NodeAddressCluster(String);
+
+impl NodeAddressCluster {
+    pub fn ip(&self) -> String {
+        self.0.split('/').next().unwrap().to_string()
+    }
+}
+
 impl NodeAddress {
     pub fn ip(&self) -> String {
         self.0.split(':').next().unwrap().to_string()

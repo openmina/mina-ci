@@ -1,14 +1,14 @@
 use tokio::time::sleep;
 use tracing::{instrument, info, error, warn};
 
-use crate::{aggregator::{AggregatorResult, aggregate_first_receive}, debugger_data::DebuggerCpnpResponse, DEBUGGER_COUNT, DEBUGGER_BASE_URL, CPNP_URL_COMPONENT, AggregatorStorage, DEBUGGER_PULL_INTERVAL};
+use crate::{aggregator::{AggregatorResult, aggregate_first_receive}, debugger_data::DebuggerCpnpResponse, AggregatorStorage, config::AggregatorEnvironment};
 
 #[instrument]
-async fn pull_debugger_data_cpnp(height: Option<usize>) -> AggregatorResult<Vec<DebuggerCpnpResponse>> {
+async fn pull_debugger_data_cpnp(height: Option<usize>, environment: &AggregatorEnvironment) -> AggregatorResult<Vec<DebuggerCpnpResponse>> {
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
 
-    for debugger_label in 1..=DEBUGGER_COUNT {
-        let data = get_height_data_cpnp(height, debugger_label).await?;
+    for debugger_label in 1..=environment.debugger_count {
+        let data = get_height_data_cpnp(height, debugger_label, environment).await?;
         collected.push(data);
         info!("Pulling dbg{}", debugger_label);
     }
@@ -16,23 +16,23 @@ async fn pull_debugger_data_cpnp(height: Option<usize>) -> AggregatorResult<Vec<
     Ok(collected)
 }
 
-async fn get_height_data_cpnp(height: Option<usize>, debugger_label: usize) -> AggregatorResult<DebuggerCpnpResponse> {
+async fn get_height_data_cpnp(height: Option<usize>, debugger_label: usize, environment: &AggregatorEnvironment) -> AggregatorResult<DebuggerCpnpResponse> {
     let url = if let Some(height) = height {
-        format!("{}{}/{}/{}", DEBUGGER_BASE_URL, debugger_label, CPNP_URL_COMPONENT, height)
+        format!("{}{}/{}/{}", environment.debugger_base_url, debugger_label, environment.libp2p_ipc_encpoint, height)
     } else {
-        format!("{}{}/{}/{}", DEBUGGER_BASE_URL, debugger_label, CPNP_URL_COMPONENT, "latest")
+        format!("{}{}/{}/{}", environment.debugger_base_url, debugger_label, environment.libp2p_ipc_encpoint, "latest")
     };
     reqwest::get(url).await?.json().await.map_err(|e| e.into())
 }
 
 // #[instrument]
-pub async fn poll_debuggers(storage: &mut AggregatorStorage) {
-    sleep(DEBUGGER_PULL_INTERVAL).await;
+pub async fn poll_debuggers(storage: &mut AggregatorStorage, environment: &AggregatorEnvironment) {
+    sleep(environment.data_pull_interval).await;
     loop {
         // if let Err(e) = pull_debugger_data_cpnp(None).await {
         //     error!("Error in pulling data: {}", e)
         // }
-        match pull_debugger_data_cpnp(None).await {
+        match pull_debugger_data_cpnp(None, environment).await {
             Ok(data) => {
                 let (height, aggregated_data) = match aggregate_first_receive(data) {
                     Ok((height, aggregate_data)) => (height, aggregate_data),
@@ -48,6 +48,6 @@ pub async fn poll_debuggers(storage: &mut AggregatorStorage) {
             Err(e) => error!("Error in pulling data: {}", e),
         }
         info!("Sleeping");
-        sleep(DEBUGGER_PULL_INTERVAL).await;
+        sleep(environment.data_pull_interval).await;
     }
 }

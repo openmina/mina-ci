@@ -33,6 +33,15 @@ impl<K: Ord, V: Clone> LockedBTreeMap<K, V> {
                 reason: e.to_string(),
             })
     }
+
+    pub fn get_latest(&self) -> Result<Option<V>, AggregatorError> {
+        self.inner
+            .read()
+            .map(|read_locked_storage| read_locked_storage.iter().next_back().map(|(_, v)| v.clone()))
+            .map_err(|e| AggregatorError::StorageError {
+                reason: e.to_string(),
+            })
+    }
 }
 
 impl<K: Ord, V: Clone> Default for LockedBTreeMap<K, V> {

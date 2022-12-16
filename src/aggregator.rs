@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 
 use petgraph::dot::Dot;
@@ -6,30 +6,15 @@ use petgraph::{Graph, Directed};
 use petgraph::prelude::*;
 use serde::Serialize;
 
-use crate::debugger_data::{DebuggerBlockResponse, DebuggerTime, CapturedEvent, DebuggerCpnpResponse, CpnpCapturedData};
+use crate::debugger_data::{DebuggerCpnpResponse, CpnpCapturedData};
 
 use crate::AggregatorError;
 
 pub type AggregatorResult<T> = Result<T, AggregatorError>;
 
-#[derive(Debug, Default)]
-pub struct FirstReceiveSendPair {
-    pub first_receive: Option<DebuggerTime>,
-    pub first_send: Option<DebuggerTime>,
-    pub source_node: Option<String>,
-    pub destination_node: Option<String>,
-}
-
-#[derive(Debug, Default)]
-pub struct BlockFirstReceiveSendData {
-    pub pairs: BlockFirstReceiveSendPairs,
-    pub graph: Graph<String, u64, Directed>,
-}
-
 pub type NodeIP = String;
 pub type BlockHash = String;
 
-pub type BlockFirstReceiveSendPairs = BTreeMap<NodeIP, FirstReceiveSendPair>;
 
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct CpnpLatencyAggregationData {
@@ -42,16 +27,43 @@ pub struct CpnpLatencyAggregationData {
 
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct CpnpBlockPublication {
+    #[serde(flatten)]
     pub node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData>,
     #[serde(skip)]
     pub graph: Graph<String, u64, Directed>,
     pub publish_time: u64,
+    pub block_hash: String,
+    pub height: usize,
     #[serde(skip)]
     unique_nodes: HashMap<NodeIP, NodeIndex>,
 }
 
+#[derive(Debug, Default, Serialize, Clone)]
+pub struct CpnpBlockPublicationFlattened {
+    pub height: usize,
+    pub block_hash: String,
+    pub publish_time: u64,
+    pub node_latencies: Vec<CpnpLatencyAggregationData>,
+    #[serde(skip)]
+    pub graph: Graph<String, u64, Directed>,
+}
+
+impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
+    fn from(value: CpnpBlockPublication) -> Self {
+        let node_latencies = value.node_latencies.values().cloned().collect();
+
+        Self {
+            node_latencies,
+            graph: value.graph.clone(),
+            publish_time: value.publish_time,
+            block_hash: value.block_hash,
+            height: value.height,
+        }
+    }
+}
+
 impl CpnpBlockPublication {
-    pub fn init_with_source(source_node: NodeIP, publish_time: u64) -> Self {
+    pub fn init_with_source(source_node: NodeIP, publish_time: u64, block_hash: String, height: usize) -> Self {
         let mut graph: Graph<String, u64, Directed> = Graph::new();
         let mut unique_nodes: HashMap<NodeIP, NodeIndex> = HashMap::new();
         let mut node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData> = BTreeMap::new();
@@ -69,89 +81,19 @@ impl CpnpBlockPublication {
         unique_nodes.insert(source_node.clone(), graph.add_node(source_node));
 
         Self {
+            block_hash,
             publish_time,
             graph,
             unique_nodes,
             node_latencies,
+            height,
         }
     }
-}
-
-pub fn aggregate_first_receive_send(data: Vec<DebuggerBlockResponse>) {
-    // there could be multiple blocks for a specific height, so we need to differentioat by block hash
-
-    let mut by_block: BTreeMap<BlockHash, BlockFirstReceiveSendData> = BTreeMap::new();
-    // let mut pairs: BlockFirstReceiveSendPairs = BTreeMap::new();
-
-    // collect all the events, flatten
-    let mut events: Vec<CapturedEvent> = data.iter().flat_map(|dbg| {
-        dbg.events.clone()
-    }).collect();
-
-    // and sort by time
-    events.sort_by(|a, b| a.better_time.to_nanoseconds().cmp(&b.better_time.to_nanoseconds()));
-
-    // DBEUG: quick sanity check for sorted
-    // {
-    //     for window in events.windows(2) {
-    //         let time0 = window[0].better_time.to_nanoseconds();
-    //         let time1 = window[1].better_time.to_nanoseconds();
-    //         if window[0].better_time.to_nanoseconds() > window[1].better_time.to_nanoseconds() {
-    //             println!("BAD!");
-    //             println!("{} >! {}", time0, time1);
-    //             break;
-    //         }
-    //     }
-    // }
-
-    for event in events.clone() {
-        if let "publish_new_state" = event.message_kind.as_str() {
-            let block = by_block.entry(event.hash).or_default();
-
-            if event.incoming {
-                let node_addr = event.receiver_addr;
-                let node = block.pairs.entry(node_addr.ip()).or_default();
-
-                if node.first_receive.is_none() {
-                    node.first_receive = Some(event.time);
-                    node.source_node = Some(event.sender_addr.ip());
-                }
-            } else {
-                let node_addr = event.sender_addr;
-                let node = block.pairs.entry(node_addr.ip()).or_default();
-
-                if node.first_send.is_none() {
-                    node.first_send = Some(event.time);
-                    node.destination_node = Some(event.receiver_addr.ip());
-                }
-            }
-        }
-    }
-
-    // println!("{:#?}", by_block);
-
-    // TODO: move to tests
-    // SANITY CHECK: first receive time < first send time
-    for block in by_block.values() {
-        for node in &block.pairs {
-            if let (Some(rec), Some(send)) = (node.1.first_receive.clone(), node.1.first_send.clone()) {
-                if rec.to_nanoseconds() > send.to_nanoseconds() {
-                    println!("WRONG!");
-                    println!("{} !< {}", rec.to_nanoseconds(), send.to_nanoseconds());
-                    let node_events: Vec<CapturedEvent> = events.iter().filter(|e| &e.sender_addr.ip() == node.0 || &e.receiver_addr.ip() == node.0).cloned().collect();
-                    println!("Events: {:#?}", node_events);
-                }
-            }
-        }
-    }
-
 }
 
 pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
-
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
-    // let mut pairs: BlockFirstReceiveSendPairs = BTreeMap::new();
 
     // collect all the events, flatten
     let mut events: Vec<CpnpCapturedData> = data.into_iter().flatten().collect();
@@ -160,31 +102,24 @@ pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorRes
     // events.sort_by(|a, b| a.better_time.to_nanoseconds().cmp(&b.better_time.to_nanoseconds()));
     events.sort_by_key(|e| e.real_time_microseconds);
 
-    // let json = serde_json::to_string_pretty(&events).unwrap();
-    // println!("{json}");
-
-    // DBEUG: quick sanity check for sorted
-    // {
-    //     for window in events.windows(2) {
-    //         let time0 = window[0].better_time.to_nanoseconds();
-    //         let time1 = window[1].better_time.to_nanoseconds();
-    //         if window[0].better_time.to_nanoseconds() > window[1].better_time.to_nanoseconds() {
-    //             println!("BAD!");
-    //             println!("{} >! {}", time0, time1);
-    //             break;
-    //         }
-    //     }
-    // }
-
-    // TODO: remove this additional iteration somehow as an optimization
+    // TODO: try to remove this additional iteration somehow as an optimization
+    // Note: When we are sure the debugger timestamps are correct, we can remove this as by sorting by timestamp, the pusblish event will always
+    //       preceed the receive events
     let publish_messages: Vec<CpnpCapturedData> = events.clone()
         .into_iter()
         .filter(|e| e.events.iter().filter(|cpnp_event| cpnp_event.r#type == *"publish_gossip").peekable().peek().is_some())
         .collect();
 
-    let height = publish_messages[0].events[0].msg.height;
+    // FIXME
+    let height = if !publish_messages.is_empty() {
+        publish_messages[0].events[0].msg.height
+    } else {
+        return Err(AggregatorError::SourceNotReady);
+    };
+
     for publish_message in publish_messages {
-        let publication_data = CpnpBlockPublication::init_with_source(publish_message.node_address.ip(), publish_message.real_time_microseconds);
+        let block_hash = publish_message.events[0].hash.clone();
+        let publication_data = CpnpBlockPublication::init_with_source(publish_message.node_address.ip(), publish_message.real_time_microseconds, block_hash, height);
         by_block.insert(publish_message.events[0].hash.clone(), publication_data);
     }
 

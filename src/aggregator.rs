@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 
+use petgraph::algo::{connected_components, is_cyclic_directed};
 use petgraph::dot::Dot;
 use petgraph::prelude::*;
 use petgraph::{Directed, Graph};
@@ -14,6 +15,7 @@ pub type AggregatorResult<T> = Result<T, AggregatorError>;
 
 pub type NodeIP = String;
 pub type BlockHash = String;
+pub type MessageGraph = Graph<String, u64, Directed>;
 
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct CpnpLatencyAggregationData {
@@ -29,10 +31,11 @@ pub struct CpnpBlockPublication {
     #[serde(flatten)]
     pub node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData>,
     #[serde(skip)]
-    pub graph: Graph<String, u64, Directed>,
+    pub graph: MessageGraph,
     pub publish_time: u64,
     pub block_hash: String,
     pub height: usize,
+    pub graph_info: Option<MessageGraphInfo>,
     #[serde(skip)]
     unique_nodes: HashMap<NodeIP, NodeIndex>,
 }
@@ -43,8 +46,18 @@ pub struct CpnpBlockPublicationFlattened {
     pub block_hash: String,
     pub publish_time: u64,
     pub node_latencies: Vec<CpnpLatencyAggregationData>,
+    pub graph_info: Option<MessageGraphInfo>,
     #[serde(skip)]
-    pub graph: Graph<String, u64, Directed>,
+    pub graph: MessageGraph,
+}
+
+#[derive(Debug, Default, Serialize, Clone)]
+pub struct MessageGraphInfo {
+    pub node_count: usize,
+    pub source_node_count: usize,
+    pub source_nodes: Vec<String>,
+    pub graph_count: usize,
+    pub is_graph_cyclic: bool,
 }
 
 impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
@@ -57,6 +70,7 @@ impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
             publish_time: value.publish_time,
             block_hash: value.block_hash,
             height: value.height,
+            graph_info: value.graph_info,
         }
     }
 }
@@ -68,7 +82,7 @@ impl CpnpBlockPublication {
         block_hash: String,
         height: usize,
     ) -> Self {
-        let mut graph: Graph<String, u64, Directed> = Graph::new();
+        let mut graph: MessageGraph = Graph::new();
         let mut unique_nodes: HashMap<NodeIP, NodeIndex> = HashMap::new();
         let mut node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData> = BTreeMap::new();
 
@@ -91,6 +105,7 @@ impl CpnpBlockPublication {
             unique_nodes,
             node_latencies,
             height,
+            graph_info: None,
         }
     }
 }
@@ -199,6 +214,24 @@ pub fn aggregate_first_receive(
         }
     }
 
+    // Add info by running algos on the constructed graph
+    for (_, block_data) in by_block.iter_mut() {
+        let source_nodes = get_source_nodes(&block_data.graph);
+        let node_count = block_data.graph.node_count();
+        let graph_count = connected_components(&block_data.graph);
+        let is_graph_cyclic = is_cyclic_directed(&block_data.graph);
+
+        let info = MessageGraphInfo {
+            node_count,
+            source_node_count: source_nodes.len(),
+            source_nodes,
+            graph_count,
+            is_graph_cyclic,
+        };
+
+        block_data.graph_info = Some(info);
+    }
+
     Ok((height, by_block))
     // for (hash, data) in by_block {
     //     let dot = Dot::new(&data.graph);
@@ -221,4 +254,14 @@ pub fn aggregate_first_receive(
     //         }
     //     }
     // }
+}
+
+fn get_source_nodes(graph: &MessageGraph) -> Vec<String> {
+    let mut sources: Vec<String> = vec![];
+    for node in graph.node_indices() {
+        if graph.edges_directed(node, Incoming).peekable().peek().is_none() {
+            sources.push(graph.node_weight(node).unwrap().to_string());
+        }
+    }
+    sources
 }

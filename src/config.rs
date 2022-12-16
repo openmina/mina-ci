@@ -26,8 +26,8 @@ pub fn set_environment() -> AggregatorEnvironment {
         .expect("DEBUGGER_COUNT should be a positve number (usize)");
 
     // TODO: parse as URL
-    let debugger_base_url = env::var("DEBUGGER_BASE_URL")
-        .unwrap_or_else(|_| DEBUGGER_BASE_URL_DEFAULT.to_string());
+    let debugger_base_url =
+        env::var("DEBUGGER_BASE_URL").unwrap_or_else(|_| DEBUGGER_BASE_URL_DEFAULT.to_string());
 
     let libp2p_ipc_encpoint = env::var("LIBP2P_IPC_URL_COMPONENT")
         .unwrap_or_else(|_| LIBP2P_IPC_URL_COMPONENT_DEFAULT.to_string());

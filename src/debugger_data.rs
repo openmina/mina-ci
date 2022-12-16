@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct  NodeAddress(String);
+pub struct NodeAddress(String);
 
 impl NodeAddress {
     pub fn ip(&self) -> String {
@@ -68,7 +68,7 @@ pub struct CpnpCapturedData {
     pub time_microseconds: u64,
     pub real_time_microseconds: u64,
     pub node_address: NodeAddress,
-    pub events: Vec<CpnpEvent>
+    pub events: Vec<CpnpEvent>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

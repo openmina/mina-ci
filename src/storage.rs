@@ -1,4 +1,7 @@
-use std::{sync::{Arc, RwLock}, collections::BTreeMap};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+};
 
 use crate::error::AggregatorError;
 
@@ -37,7 +40,12 @@ impl<K: Ord, V: Clone> LockedBTreeMap<K, V> {
     pub fn get_latest(&self) -> Result<Option<V>, AggregatorError> {
         self.inner
             .read()
-            .map(|read_locked_storage| read_locked_storage.iter().next_back().map(|(_, v)| v.clone()))
+            .map(|read_locked_storage| {
+                read_locked_storage
+                    .iter()
+                    .next_back()
+                    .map(|(_, v)| v.clone())
+            })
             .map_err(|e| AggregatorError::StorageError {
                 reason: e.to_string(),
             })

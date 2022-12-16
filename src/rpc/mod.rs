@@ -5,10 +5,7 @@ use tokio::task::JoinHandle;
 
 use crate::AggregatorStorage;
 
-pub fn spawn_rpc_server(
-    rpc_port: u16,
-    storage: AggregatorStorage,
-) -> JoinHandle<()> {
+pub fn spawn_rpc_server(rpc_port: u16, storage: AggregatorStorage) -> JoinHandle<()> {
     tokio::spawn(async move {
         let api = filters::filters(storage.clone());
 

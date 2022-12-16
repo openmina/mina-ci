@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 
 use petgraph::dot::Dot;
-use petgraph::{Graph, Directed};
 use petgraph::prelude::*;
+use petgraph::{Directed, Graph};
 use serde::Serialize;
 
-use crate::debugger_data::{DebuggerCpnpResponse, CpnpCapturedData};
+use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse};
 
 use crate::AggregatorError;
 
@@ -14,7 +14,6 @@ pub type AggregatorResult<T> = Result<T, AggregatorError>;
 
 pub type NodeIP = String;
 pub type BlockHash = String;
-
 
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct CpnpLatencyAggregationData {
@@ -63,7 +62,12 @@ impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
 }
 
 impl CpnpBlockPublication {
-    pub fn init_with_source(source_node: NodeIP, publish_time: u64, block_hash: String, height: usize) -> Self {
+    pub fn init_with_source(
+        source_node: NodeIP,
+        publish_time: u64,
+        block_hash: String,
+        height: usize,
+    ) -> Self {
         let mut graph: Graph<String, u64, Directed> = Graph::new();
         let mut unique_nodes: HashMap<NodeIP, NodeIndex> = HashMap::new();
         let mut node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData> = BTreeMap::new();
@@ -91,7 +95,9 @@ impl CpnpBlockPublication {
     }
 }
 
-pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
+pub fn aggregate_first_receive(
+    data: Vec<DebuggerCpnpResponse>,
+) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
 
@@ -105,9 +111,17 @@ pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorRes
     // TODO: try to remove this additional iteration somehow as an optimization
     // Note: When we are sure the debugger timestamps are correct, we can remove this as by sorting by timestamp, the pusblish event will always
     //       preceed the receive events
-    let publish_messages: Vec<CpnpCapturedData> = events.clone()
+    let publish_messages: Vec<CpnpCapturedData> = events
+        .clone()
         .into_iter()
-        .filter(|e| e.events.iter().filter(|cpnp_event| cpnp_event.r#type == *"publish_gossip").peekable().peek().is_some())
+        .filter(|e| {
+            e.events
+                .iter()
+                .filter(|cpnp_event| cpnp_event.r#type == *"publish_gossip")
+                .peekable()
+                .peek()
+                .is_some()
+        })
         .collect();
 
     // FIXME
@@ -119,7 +133,12 @@ pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorRes
 
     for publish_message in publish_messages {
         let block_hash = publish_message.events[0].hash.clone();
-        let publication_data = CpnpBlockPublication::init_with_source(publish_message.node_address.ip(), publish_message.real_time_microseconds, block_hash, height);
+        let publication_data = CpnpBlockPublication::init_with_source(
+            publish_message.node_address.ip(),
+            publish_message.real_time_microseconds,
+            block_hash,
+            height,
+        );
         by_block.insert(publish_message.events[0].hash.clone(), publication_data);
     }
 
@@ -137,25 +156,46 @@ pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorRes
             let current_node = event.node_address;
 
             // this is a hack due to wrong timestamps...
-            let source_receive_time = if let Some (data) = block_data.node_latencies.get(&source_node.ip()) {
-                data.receive_time
-            } else {
-                u64::MAX
-            };
-            
+            let source_receive_time =
+                if let Some(data) = block_data.node_latencies.get(&source_node.ip()) {
+                    data.receive_time
+                } else {
+                    u64::MAX
+                };
+
             let node_data = CpnpLatencyAggregationData {
                 message_source: source_node.ip(),
                 node_address: current_node.ip(),
                 receive_time: event.real_time_microseconds,
-                latency_since_sent: Some(event.real_time_microseconds.saturating_sub(source_receive_time)),
-                latency_since_block_publication: event.real_time_microseconds.saturating_sub(block_data.publish_time),
+                latency_since_sent: Some(
+                    event
+                        .real_time_microseconds
+                        .saturating_sub(source_receive_time),
+                ),
+                latency_since_block_publication: event
+                    .real_time_microseconds
+                    .saturating_sub(block_data.publish_time),
             };
 
-            let source_graph_vertex = *block_data.unique_nodes.entry(source_node.ip()).or_insert_with(|| block_data.graph.add_node(source_node.ip()));
-            let destination_graph_vertex = block_data.unique_nodes.entry(current_node.ip()).or_insert_with(|| block_data.graph.add_node(current_node.ip()));
+            let source_graph_vertex = *block_data
+                .unique_nodes
+                .entry(source_node.ip())
+                .or_insert_with(|| block_data.graph.add_node(source_node.ip()));
+            let destination_graph_vertex = block_data
+                .unique_nodes
+                .entry(current_node.ip())
+                .or_insert_with(|| block_data.graph.add_node(current_node.ip()));
 
-            block_data.graph.update_edge(source_graph_vertex, *destination_graph_vertex, event.real_time_microseconds.saturating_sub(source_receive_time));
-            block_data.node_latencies.insert(current_node.ip(), node_data);
+            block_data.graph.update_edge(
+                source_graph_vertex,
+                *destination_graph_vertex,
+                event
+                    .real_time_microseconds
+                    .saturating_sub(source_receive_time),
+            );
+            block_data
+                .node_latencies
+                .insert(current_node.ip(), node_data);
         }
     }
 
@@ -181,5 +221,4 @@ pub fn aggregate_first_receive(data: Vec<DebuggerCpnpResponse>) -> AggregatorRes
     //         }
     //     }
     // }
-
 }

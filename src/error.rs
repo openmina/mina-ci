@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-
 #[derive(Debug, Error)]
 pub enum AggregatorError {
     #[error("Error while accessing storage, reason: {reason}")]

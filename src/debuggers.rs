@@ -7,6 +7,7 @@ use crate::{
     aggregator::{aggregate_first_receive, AggregatorResult},
     config::{AggregatorEnvironment, CLUSTER_NODE_LIST_URL},
     debugger_data::{DebuggerCpnpResponse, NodeAddressCluster},
+    nodes::get_node_list_from_cluster,
     AggregatorStorage,
 };
 
@@ -51,27 +52,20 @@ async fn get_height_data_cpnp(
     reqwest::get(url).await?.json().await.map_err(|e| e.into())
 }
 
-async fn get_node_list_from_cluster() -> AggregatorResult<Vec<NodeAddressCluster>> {
-    reqwest::get(CLUSTER_NODE_LIST_URL)
-        .await?
-        .json()
-        .await
-        .map_err(|e| e.into())
-}
+// async fn get_node_list_from_cluster() -> AggregatorResult<Vec<NodeAddressCluster>> {
+//     reqwest::get(CLUSTER_NODE_LIST_URL)
+//         .await?
+//         .json()
+//         .await
+//         .map_err(|e| e.into())
+// }
 
 pub async fn poll_debuggers(storage: &mut AggregatorStorage, environment: &AggregatorEnvironment) {
     loop {
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
 
-        let nodes_in_cluster: HashSet<NodeAddressCluster> = match get_node_list_from_cluster().await
-        {
-            Ok(node_list) => node_list.into_iter().collect(),
-            Err(e) => {
-                warn!("Error getting node list from cluster: {}", e);
-                HashSet::new()
-            }
-        };
+        let nodes_in_cluster: HashSet<String> = get_node_list_from_cluster(environment).await;
         match pull_debugger_data_cpnp(None, environment).await {
             Ok(data) => {
                 let (height, aggregated_data) =

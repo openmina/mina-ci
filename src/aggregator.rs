@@ -113,7 +113,7 @@ impl CpnpBlockPublication {
 
 pub fn aggregate_first_receive(
     data: Vec<DebuggerCpnpResponse>,
-    nodes_in_cluster: HashSet<NodeAddressCluster>,
+    nodes_in_cluster: HashSet<NodeIP>,
 ) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
@@ -226,8 +226,7 @@ pub fn aggregate_first_receive(
         let missing_nodes = nodes_in_cluster
             .clone()
             .into_iter()
-            .filter(|node| !block_data.unique_nodes.contains_key(&node.ip()))
-            .map(|node| node.ip())
+            .filter(|node| !block_data.unique_nodes.contains_key(node))
             .collect();
 
         let info = MessageGraphInfo {
@@ -280,3 +279,13 @@ fn get_source_nodes(graph: &MessageGraph) -> Vec<String> {
     }
     sources
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use crate::debugger_data::{DebuggerCpnpResponse, NodeAddressCluster};
+
+//     fn test_data() -> (Vec<DebuggerCpnpResponse>, Vec<NodeAddressCluster>) {
+
+//         (vec![], vec![])
+//     }
+// }

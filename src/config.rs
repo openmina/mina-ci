@@ -13,6 +13,11 @@ const DATA_PULL_INTERVAL_DEFAULT: u64 = 10;
 
 #[derive(Clone, Debug)]
 pub struct AggregatorEnvironment {
+    pub plain_node_count: usize,
+    pub seed_node_count: usize,
+    pub producer_node_count: usize,
+    pub snarker_node_count: usize,
+    pub transaction_generator_node_count: usize,
     pub debugger_count: usize,
     pub debugger_base_url: String,
     pub libp2p_ipc_encpoint: String,
@@ -25,6 +30,31 @@ pub fn set_environment() -> AggregatorEnvironment {
         .expect("DEBUGGER_COUNT environment var must be set!")
         .parse::<usize>()
         .expect("DEBUGGER_COUNT should be a positve number (usize)");
+
+    let plain_node_count = env::var("PLAIN_NODE_COUNT")
+        .expect("PLAIN_NODE_COUNT environment var must be set!")
+        .parse::<usize>()
+        .expect("PLAIN_NODE_COUNT should be a positve number (usize)");
+
+    let seed_node_count = env::var("SEED_NODE_COUNT")
+        .expect("SEED_NODE_COUNT environment var must be set!")
+        .parse::<usize>()
+        .expect("SEED_NODE_COUNT should be a positve number (usize)");
+
+    let producer_node_count = env::var("PRODUCER_NODE_COUNT")
+        .expect("PRODUCER_NODE_COUNT environment var must be set!")
+        .parse::<usize>()
+        .expect("PRODUCER_NODE_COUNT should be a positve number (usize)");
+
+    let transaction_generator_node_count = env::var("TRANSACTION_GENERATOR_NODE_COUNT")
+        .expect("TRANSACTION_GENERATOR_NODE_COUNT environment var must be set!")
+        .parse::<usize>()
+        .expect("TRANSACTION_GENERATOR_NODE_COUNT should be a positve number (usize)");
+
+    let snarker_node_count = env::var("SNARKER_NODE_COUNT")
+        .expect("SNARKER_NODE_COUNT environment var must be set!")
+        .parse::<usize>()
+        .expect("SNARKER_NODE_COUNT should be a positve number (usize)");
 
     // TODO: parse as URL
     let debugger_base_url =
@@ -45,6 +75,11 @@ pub fn set_environment() -> AggregatorEnvironment {
         .expect("RPC_PORT should be a valid port number");
 
     AggregatorEnvironment {
+        plain_node_count,
+        seed_node_count,
+        producer_node_count,
+        snarker_node_count,
+        transaction_generator_node_count,
         debugger_count,
         debugger_base_url,
         libp2p_ipc_encpoint,

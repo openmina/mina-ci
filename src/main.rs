@@ -13,6 +13,7 @@ pub mod config;
 pub mod debugger_data;
 pub mod debuggers;
 pub mod error;
+pub mod nodes;
 pub mod rpc;
 pub mod storage;
 

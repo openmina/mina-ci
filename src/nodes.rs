@@ -1,8 +1,9 @@
+use futures::{stream, StreamExt};
 use std::collections::HashSet;
 
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
-use tracing::log::warn;
+use tracing::{error, info, instrument, log::warn};
 
 use crate::{aggregator::AggregatorResult, config::AggregatorEnvironment};
 
@@ -40,9 +41,11 @@ pub struct AddrsAndPorts {
     pub external_ip: String,
 }
 
-async fn query_node(url: &str, payload: &'static str) -> AggregatorResult<Response> {
-    let client = reqwest::Client::new();
-
+async fn query_node(
+    client: reqwest::Client,
+    url: &str,
+    payload: &'static str,
+) -> AggregatorResult<Response> {
     Ok(client
         .post(url)
         .body(payload)
@@ -51,26 +54,55 @@ async fn query_node(url: &str, payload: &'static str) -> AggregatorResult<Respon
         .await?)
 }
 
-async fn query_node_ip(url: &str) -> AggregatorResult<String> {
-    let res: GraphqlResponse<DaemonStatusData> =
-        query_node(url, NODE_IPS_PAYLOAD).await?.json().await?;
+async fn query_node_ip(client: reqwest::Client, url: &str) -> AggregatorResult<String> {
+    let res: GraphqlResponse<DaemonStatusData> = query_node(client, url, NODE_IPS_PAYLOAD)
+        .await?
+        .json()
+        .await?;
     Ok(res.data.daemon_status.addrs_and_ports.external_ip)
 }
 
+#[instrument]
+/// Fires requests to all the nodes and collects their IPs (requests are parallel)
 pub async fn get_node_list_from_cluster(environment: &AggregatorEnvironment) -> HashSet<String> {
-    let mut collected: HashSet<String> = HashSet::new();
-    // seed nodes
+    let client = reqwest::Client::new();
+
+    let urls = collect_all_urls(environment);
+    let bodies = stream::iter(urls)
+        .map(|url| {
+            let client = client.clone();
+            tokio::spawn(async move { (url.clone(), query_node_ip(client, &url).await) })
+        })
+        .buffer_unordered(20);
+
+    let collected = bodies
+        .fold(HashSet::new(), |mut collected, b| async {
+            match b {
+                Ok((url, Ok(res))) => {
+                    info!("{url} OK");
+                    collected.insert(res);
+                }
+                Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
+                Err(e) => error!("Tokio join error: {e}"),
+            }
+            collected
+        })
+        .await;
+
+    info!("Collected {} nodes", collected.len());
+
+    collected
+}
+
+fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
+    let mut res: Vec<String> = vec![];
+
     for seed_label in 1..=environment.seed_node_count {
         let url = format!(
             "{}/{}{}/{}",
             CLUSTER_BASE_URL, SEED_NODE_COMPONENT, seed_label, GRAPHQL_COMPONENT
         );
-        match query_node_ip(&url).await {
-            Ok(ip) => {
-                collected.insert(ip);
-            }
-            Err(e) => warn!("Seed node {seed_label} failed to respond, reason: {}", e),
-        }
+        res.push(url);
     }
 
     // producer nodes
@@ -79,15 +111,7 @@ pub async fn get_node_list_from_cluster(environment: &AggregatorEnvironment) -> 
             "{}/{}{}/{}",
             CLUSTER_BASE_URL, PRODUCER_NODE_COMPONENT, producer_label, GRAPHQL_COMPONENT
         );
-        match query_node_ip(&url).await {
-            Ok(ip) => {
-                collected.insert(ip);
-            }
-            Err(e) => warn!(
-                "Producer node {producer_label} failed to respond, reason: {}",
-                e
-            ),
-        }
+        res.push(url);
     }
 
     // snarker nodes
@@ -96,15 +120,7 @@ pub async fn get_node_list_from_cluster(environment: &AggregatorEnvironment) -> 
             "{}/{}{}/{}",
             CLUSTER_BASE_URL, SNARKER_NODE_COMPONENT, snarker_label, GRAPHQL_COMPONENT
         );
-        match query_node_ip(&url).await {
-            Ok(ip) => {
-                collected.insert(ip);
-            }
-            Err(e) => warn!(
-                "Snarker node {snarker_label} failed to respond, reason: {}",
-                e
-            ),
-        }
+        res.push(url);
     }
 
     // transaction generator nodes
@@ -121,15 +137,7 @@ pub async fn get_node_list_from_cluster(environment: &AggregatorEnvironment) -> 
             "{}/{}/{}",
             CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, GRAPHQL_COMPONENT
         );
-        match query_node_ip(&url).await {
-            Ok(ip) => {
-                collected.insert(ip);
-            }
-            Err(e) => warn!(
-                "Transaction generator node failed to respond, reason: {}",
-                e
-            ),
-        }
+        res.push(url);
     }
 
     // plain nodes
@@ -145,19 +153,8 @@ pub async fn get_node_list_from_cluster(environment: &AggregatorEnvironment) -> 
                 CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, GRAPHQL_COMPONENT
             )
         };
-
-        println!("Url: {}", url);
-
-        match query_node_ip(&url).await {
-            Ok(ip) => {
-                collected.insert(ip);
-            }
-            Err(e) => warn!(
-                "Plain node {plain_node_label} failed to respond, reason: {}",
-                e
-            ),
-        }
+        res.push(url);
     }
 
-    collected
+    res
 }

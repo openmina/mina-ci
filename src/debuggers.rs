@@ -18,9 +18,12 @@ async fn pull_debugger_data_cpnp(
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
 
     for debugger_label in 1..=environment.debugger_count {
-        let data = get_height_data_cpnp(height, debugger_label, environment).await?;
-        collected.push(data);
         info!("Pulling dbg{}", debugger_label);
+
+        match get_height_data_cpnp(height, debugger_label, environment).await {
+            Ok(data) => collected.push(data),
+            Err(e) => warn!("dbg{} failed to provide data, reson: {}", debugger_label, e),
+        }
     }
 
     Ok(collected)
@@ -57,8 +60,10 @@ async fn get_node_list_from_cluster() -> AggregatorResult<Vec<NodeAddressCluster
 }
 
 pub async fn poll_debuggers(storage: &mut AggregatorStorage, environment: &AggregatorEnvironment) {
-    sleep(environment.data_pull_interval).await;
     loop {
+        info!("Sleeping");
+        sleep(environment.data_pull_interval).await;
+
         let nodes_in_cluster: HashSet<NodeAddressCluster> = match get_node_list_from_cluster().await
         {
             Ok(node_list) => node_list.into_iter().collect(),
@@ -83,7 +88,5 @@ pub async fn poll_debuggers(storage: &mut AggregatorStorage, environment: &Aggre
             }
             Err(e) => error!("Error in pulling data: {}", e),
         }
-        info!("Sleeping");
-        sleep(environment.data_pull_interval).await;
     }
 }

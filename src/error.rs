@@ -8,6 +8,6 @@ pub enum AggregatorError {
     #[error("Error in debugger RPC communication, reason: {0}")]
     OutgoingRpcError(#[from] reqwest::Error),
 
-    #[error("Produced node not seen yet!")]
+    #[error("Producer node not seen yet!")]
     SourceNotReady,
 }

@@ -9,9 +9,7 @@ use serde::Serialize;
 
 use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse, NodeAddressCluster};
 
-use crate::AggregatorError;
-
-pub type AggregatorResult<T> = Result<T, AggregatorError>;
+use crate::{AggregatorError, AggregatorResult};
 
 pub type NodeIP = String;
 pub type BlockHash = String;

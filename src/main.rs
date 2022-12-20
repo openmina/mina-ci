@@ -1,23 +1,26 @@
 use std::collections::BTreeMap;
 
 use error::AggregatorError;
-use tokio::{signal, time::Duration};
+use tokio::signal;
 use tracing::info;
 
-use aggregator::{BlockHash, CpnpBlockPublication};
+use aggregators::{BlockHash, CpnpBlockPublication, BlockTraceAggregatorReport};
 
-use crate::{debuggers::poll_debuggers, storage::LockedBTreeMap};
+use crate::{executor::poll_debuggers, storage::LockedBTreeMap};
 
-pub mod aggregator;
+pub mod aggregators;
 pub mod config;
 pub mod debugger_data;
-pub mod debuggers;
+pub mod executor;
 pub mod error;
 pub mod nodes;
 pub mod rpc;
 pub mod storage;
 
-pub type AggregatorStorage = LockedBTreeMap<usize, BTreeMap<BlockHash, CpnpBlockPublication>>;
+pub type AggregatorResult<T> = Result<T, AggregatorError>;
+
+pub type IpcAggregatorStorage = LockedBTreeMap<usize, BTreeMap<BlockHash, CpnpBlockPublication>>;
+pub type BlockTraceAggregatorStorage = LockedBTreeMap<usize, BTreeMap<BlockHash, Vec<BlockTraceAggregatorReport>>>;
 
 #[tokio::main]
 async fn main() {
@@ -26,14 +29,16 @@ async fn main() {
     let environment = config::set_environment();
 
     info!("Creating debugger pulling thread");
-    let storage: AggregatorStorage = LockedBTreeMap::new();
+    let ipc_storage: IpcAggregatorStorage = LockedBTreeMap::new();
+    let block_trace_storage: BlockTraceAggregatorStorage = LockedBTreeMap::new();
 
-    let mut t_storage = storage.clone();
+    let mut t_ipc_storage = ipc_storage.clone();
+    let mut t_block_trace_storage = block_trace_storage.clone();
     let t_environment = environment.clone();
-    let handle = tokio::spawn(async move { poll_debuggers(&mut t_storage, &t_environment).await });
+    let handle = tokio::spawn(async move { poll_debuggers(&mut t_ipc_storage, &mut t_block_trace_storage, &t_environment).await });
 
     info!("Creating rpc server");
-    let rpc_server_handle = rpc::spawn_rpc_server(environment.rpc_port, storage.clone());
+    let rpc_server_handle = rpc::spawn_rpc_server(environment.rpc_port, ipc_storage.clone(), block_trace_storage.clone());
 
     let mut signal_stream =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())

@@ -1,11 +1,16 @@
-use futures::{stream, StreamExt};
-use std::collections::HashSet;
-
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, instrument, log::warn};
 
-use crate::{aggregator::AggregatorResult, config::AggregatorEnvironment};
+use crate::{config::AggregatorEnvironment, AggregatorResult};
+
+pub mod node_ips;
+pub use node_ips::*;
+
+pub mod producer_traces;
+pub use producer_traces::*;
+
+pub mod node_block_traces;
+pub use node_block_traces::*;
 
 const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31308";
 const PLAIN_NODE_COMPONENT: &str = "node";
@@ -16,35 +21,15 @@ const TRANSACTION_GENERTOR_NODE_COMPONENT: &str = "transaction-generator";
 
 const GRAPHQL_COMPONENT: &str = "graphql";
 
-const NODE_IPS_PAYLOAD: &str = r#"{"query": "{ daemonStatus { addrsAndPorts { externalIp }}}" }"#;
-
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GraphqlResponse<T> {
     pub data: T,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct DaemonStatusData {
-    pub daemon_status: DaemonStatus,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct DaemonStatus {
-    pub addrs_and_ports: AddrsAndPorts,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AddrsAndPorts {
-    pub external_ip: String,
-}
-
 async fn query_node(
     client: reqwest::Client,
     url: &str,
-    payload: &'static str,
+    payload: String,
 ) -> AggregatorResult<Response> {
     Ok(client
         .post(url)
@@ -52,46 +37,6 @@ async fn query_node(
         .header("Content-Type", "application/json")
         .send()
         .await?)
-}
-
-async fn query_node_ip(client: reqwest::Client, url: &str) -> AggregatorResult<String> {
-    let res: GraphqlResponse<DaemonStatusData> = query_node(client, url, NODE_IPS_PAYLOAD)
-        .await?
-        .json()
-        .await?;
-    Ok(res.data.daemon_status.addrs_and_ports.external_ip)
-}
-
-#[instrument]
-/// Fires requests to all the nodes and collects their IPs (requests are parallel)
-pub async fn get_node_list_from_cluster(environment: &AggregatorEnvironment) -> HashSet<String> {
-    let client = reqwest::Client::new();
-
-    let urls = collect_all_urls(environment);
-    let bodies = stream::iter(urls)
-        .map(|url| {
-            let client = client.clone();
-            tokio::spawn(async move { (url.clone(), query_node_ip(client, &url).await) })
-        })
-        .buffer_unordered(20);
-
-    let collected = bodies
-        .fold(HashSet::new(), |mut collected, b| async {
-            match b {
-                Ok((url, Ok(res))) => {
-                    info!("{url} OK");
-                    collected.insert(res);
-                }
-                Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
-                Err(e) => error!("Tokio join error: {e}"),
-            }
-            collected
-        })
-        .await;
-
-    info!("Collected {} nodes", collected.len());
-
-    collected
 }
 
 fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
@@ -106,13 +51,8 @@ fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
     }
 
     // producer nodes
-    for producer_label in 1..=environment.producer_node_count {
-        let url = format!(
-            "{}/{}{}/{}",
-            CLUSTER_BASE_URL, PRODUCER_NODE_COMPONENT, producer_label, GRAPHQL_COMPONENT
-        );
-        res.push(url);
-    }
+    let producers = collect_producer_urls(environment);
+    res.extend(producers);
 
     // snarker nodes
     for snarker_label in 1..=environment.snarker_node_count {
@@ -156,5 +96,17 @@ fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
         res.push(url);
     }
 
+    res
+}
+
+fn collect_producer_urls(environment: &AggregatorEnvironment) -> Vec<String> {
+    let mut res = vec![];
+    for producer_label in 1..=environment.producer_node_count {
+        let url = format!(
+            "{}/{}{}/{}",
+            CLUSTER_BASE_URL, PRODUCER_NODE_COMPONENT, producer_label, GRAPHQL_COMPONENT
+        );
+        res.push(url);
+    }
     res
 }

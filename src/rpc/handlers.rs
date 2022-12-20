@@ -1,15 +1,14 @@
 use reqwest::StatusCode;
 
 use crate::{
-    aggregator::{CpnpBlockPublication, CpnpBlockPublicationFlattened},
-    AggregatorStorage,
+    IpcAggregatorStorage, aggregators::{CpnpBlockPublicationFlattened, CpnpBlockPublication, BlockTraceAggregatorReport}, BlockTraceAggregatorStorage,
 };
 
 pub async fn get_aggregated_block_receive_data(
     height: usize,
-    storage: AggregatorStorage,
+    ipc_storage: IpcAggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = storage.get(height) {
+    if let Ok(Some(data)) = ipc_storage.get(height) {
         let res: Vec<CpnpBlockPublicationFlattened> = data
             .values()
             .cloned()
@@ -29,9 +28,9 @@ pub async fn get_aggregated_block_receive_data(
 }
 
 pub async fn get_aggregated_block_receive_data_latest(
-    storage: AggregatorStorage,
+    ipc_storage: IpcAggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = storage.get_latest() {
+    if let Ok(Some(data)) = ipc_storage.get_latest() {
         let res: Vec<CpnpBlockPublicationFlattened> = data
             .values()
             .cloned()
@@ -45,6 +44,51 @@ pub async fn get_aggregated_block_receive_data_latest(
     } else {
         Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<CpnpBlockPublication>::new()),
+            StatusCode::OK,
+        ))
+    }
+}
+
+pub async fn get_aggregated_block_trace_data(
+    height: usize,
+    block_trace_storage: BlockTraceAggregatorStorage,
+) -> Result<impl warp::Reply, warp::reject::Rejection> {
+    if let Ok(Some(data)) = block_trace_storage.get(height) {
+        let res: Vec<BlockTraceAggregatorReport> = data
+            .values()
+            .cloned()
+            .into_iter()
+            .flatten()
+            .collect();
+        Ok(warp::reply::with_status(
+            warp::reply::json(&res),
+            StatusCode::OK,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
+            StatusCode::OK,
+        ))
+    }
+}
+
+pub async fn get_aggregated_block_trace_data_latest(
+    block_trace_storage: BlockTraceAggregatorStorage,
+) -> Result<impl warp::Reply, warp::reject::Rejection> {
+    if let Ok(Some(data)) = block_trace_storage.get_latest() {
+        let res: Vec<BlockTraceAggregatorReport> = data
+            .values()
+            .cloned()
+            .into_iter()
+            .flatten()
+            .collect();
+        Ok(warp::reply::with_status(
+            warp::reply::json(&res),
+            StatusCode::OK,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
             StatusCode::OK,
         ))
     }

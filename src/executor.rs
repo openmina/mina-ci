@@ -76,7 +76,7 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
 
         // Catch the case that the block producers have different height for their most recent blocks
         if blocks_on_most_recent_height.len() > 1 && !blocks_on_most_recent_height.windows(2).all(|w| w[0].0 == w[1].0) {
-            info!("Height missmatch!");
+            info!("Height missmatch on producers! Using highest block_height");
             // With this check we can eliminate the scenraio when a block producer lags behind, retaining only the highest block_height
             let highest = blocks_on_most_recent_height.iter().max().unwrap().0;
             blocks_on_most_recent_height.retain(|(height, _)| height == &highest);

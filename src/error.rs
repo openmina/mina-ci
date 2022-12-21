@@ -10,4 +10,7 @@ pub enum AggregatorError {
 
     #[error("Producer node not seen yet!")]
     SourceNotReady,
+
+    #[error("Nodes have not produced any traces yet!")]
+    NoTracesYet,
 }

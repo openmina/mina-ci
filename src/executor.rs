@@ -85,17 +85,19 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
 
         info!("Height: {height}");
 
-        info!("Aggregating traces...");
         for (_, state_hash) in blocks_on_most_recent_height {
+            info!("Collecting node traces and data for block {state_hash}...");
             let trace = get_block_trace_from_cluster(environment, &state_hash).await;
+            info!("Traces and data collected for block {state_hash}");
+            info!("Aggregating data and traces for block {state_hash}");
             match aggregate_block_traces(height, &state_hash, trace) {
                 Ok(data) => {
-                    block_traces.insert(state_hash, data);
+                    block_traces.insert(state_hash.clone(), data);
                 },
                 Err(e) => warn!("{}", e),
             }
+            info!("Aggregation finished for block {state_hash}...");
         }
-        info!("Aggregating traces finished");
 
         let _ = block_trace_storage.insert(height, block_traces);
 

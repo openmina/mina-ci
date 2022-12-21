@@ -14,49 +14,6 @@ const STRUCTURED_TRACE_PAYLOAD: &str = r#"{"query": "{ blockStructuredTrace(bloc
 #[serde(rename_all = "camelCase")]
 pub struct BlockStructuredTraceData {
     pub block_structured_trace: BlockStructuredTrace,
-    pub daemon_status: DaemonStatusForTraces,
-    pub snark_pool: Vec<SnarkPoolElement>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BlockStructuredTraceDataSlim {
-    pub block_structured_trace: BlockStructuredTrace,
-    pub daemon_status: DaemonStatusForTraces,
-    pub snark_pool: usize,
-}
-
-impl From<BlockStructuredTraceData> for BlockStructuredTraceDataSlim {
-    fn from(value: BlockStructuredTraceData) -> Self {
-        Self {
-            block_structured_trace: value.block_structured_trace,
-            daemon_status: value.daemon_status,
-            snark_pool: value.snark_pool.len(),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct SnarkPoolElement {
-    pub prover: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct DaemonMetrics {
-    pub transaction_pool_size: usize,
-    pub transactions_added_to_pool: usize,
-    pub transaction_pool_diff_broadcasted: usize,
-    pub transaction_pool_diff_received: usize,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct DaemonStatusForTraces {
-    pub addrs_and_ports: AddrsAndPorts,
-    pub sync_status: String,
-    pub metrics: DaemonMetrics,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -83,16 +40,16 @@ pub struct BlockStructuredTraceCheckpoint {
     pub checkpoints: Vec<BlockStructuredTraceCheckpoint>,
 }
 
-async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str) -> AggregatorResult<BlockStructuredTraceDataSlim> {
+async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str) -> AggregatorResult<BlockStructuredTrace> {
     let res: GraphqlResponse<BlockStructuredTraceData> = query_node(client, url, STRUCTURED_TRACE_PAYLOAD.replace("{STATE_HASH}", state_hash))
         .await?
         .json()
         .await?;
 
-    Ok(res.data.into())
+    Ok(res.data.block_structured_trace)
 }
 
-pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, state_hash: &str) -> BTreeMap<String, BlockStructuredTraceDataSlim> {
+pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, state_hash: &str) -> BTreeMap<String, BlockStructuredTrace> {
     let client = reqwest::Client::new();
 
     let urls = collect_all_urls(environment);
@@ -104,8 +61,8 @@ pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, s
         })
         .buffer_unordered(150);
 
-    let collected: BTreeMap<String, BlockStructuredTraceDataSlim> = bodies
-        .fold(BTreeMap::<String, BlockStructuredTraceDataSlim>::new(), |mut collected, b| async {
+    let collected: BTreeMap<String, BlockStructuredTrace> = bodies
+        .fold(BTreeMap::<String, BlockStructuredTrace>::new(), |mut collected, b| async {
             match b {
                 Ok((url, Ok(res))) => {
                     debug!("{url} OK");

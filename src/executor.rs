@@ -7,7 +7,7 @@ use crate::{
     AggregatorResult,
     config::{AggregatorEnvironment, CLUSTER_NODE_LIST_URL},
     debugger_data::{DebuggerCpnpResponse, NodeAddressCluster},
-    nodes::{get_node_list_from_cluster, get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace},
+    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster},
     IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport}, BlockTraceAggregatorStorage,
 };
 
@@ -65,8 +65,9 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
 
-        // let nodes_in_cluster: HashSet<String> = get_node_list_from_cluster(environment).await;
+        info!("Collecting produced blocks...");
         let mut blocks_on_most_recent_height = get_most_recent_produced_blocks(environment).await;
+        info!("Produced blocks collected");
 
         if blocks_on_most_recent_height.is_empty() {
             info!("No blocks yet");
@@ -86,12 +87,17 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
 
         info!("Height: {height}");
 
+        // collect node info
+        info!("Collecting cluster nodes information");
+        let node_infos = get_node_info_from_cluster(environment).await;
+        info!("Information collected");
+
         for (_, state_hash) in blocks_on_most_recent_height {
-            info!("Collecting node traces and data for block {state_hash}...");
+            info!("Collecting node traces for block {state_hash}...");
             let trace = get_block_trace_from_cluster(environment, &state_hash).await;
-            info!("Traces and data collected for block {state_hash}");
+            info!("Traces collected for block {state_hash}");
             info!("Aggregating data and traces for block {state_hash}");
-            match aggregate_block_traces(height, &state_hash, trace) {
+            match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
                 Ok(data) => {
                     block_traces.insert(state_hash.clone(), data);
                 },

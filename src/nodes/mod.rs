@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::AggregatorEnvironment, AggregatorResult};
 
-pub mod node_ips;
-pub use node_ips::*;
+pub mod node_info;
+pub use node_info::*;
 
 pub mod producer_traces;
 pub use producer_traces::*;

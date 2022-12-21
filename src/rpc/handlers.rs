@@ -30,7 +30,7 @@ pub async fn get_aggregated_block_receive_data(
 pub async fn get_aggregated_block_receive_data_latest(
     ipc_storage: IpcAggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = ipc_storage.get_latest() {
+    if let Ok(Some(data)) = ipc_storage.get_latest_value() {
         let res: Vec<CpnpBlockPublicationFlattened> = data
             .values()
             .cloned()
@@ -75,7 +75,7 @@ pub async fn get_aggregated_block_trace_data(
 pub async fn get_aggregated_block_trace_data_latest(
     block_trace_storage: BlockTraceAggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = block_trace_storage.get_latest() {
+    if let Ok(Some(data)) = block_trace_storage.get_latest_value() {
         let res: Vec<BlockTraceAggregatorReport> = data
             .values()
             .cloned()
@@ -89,6 +89,22 @@ pub async fn get_aggregated_block_trace_data_latest(
     } else {
         Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
+            StatusCode::OK,
+        ))
+    }
+}
+
+pub async fn get_aggregated_block_trace_data_latest_height(
+    block_trace_storage: BlockTraceAggregatorStorage,
+) -> Result<impl warp::Reply, warp::reject::Rejection> {
+    if let Ok(Some(data)) = block_trace_storage.get_latest_key() {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&data),
+            StatusCode::OK,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&0),
             StatusCode::OK,
         ))
     }

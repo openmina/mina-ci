@@ -6,11 +6,11 @@ use std::{
 use crate::error::AggregatorError;
 
 #[derive(Clone, Debug)]
-pub struct LockedBTreeMap<K: Ord, V: Clone> {
+pub struct LockedBTreeMap<K: Ord + Clone, V: Clone> {
     inner: Arc<RwLock<BTreeMap<K, V>>>,
 }
 
-impl<K: Ord, V: Clone> LockedBTreeMap<K, V> {
+impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(BTreeMap::new())),
@@ -37,7 +37,7 @@ impl<K: Ord, V: Clone> LockedBTreeMap<K, V> {
             })
     }
 
-    pub fn get_latest(&self) -> Result<Option<V>, AggregatorError> {
+    pub fn get_latest_value(&self) -> Result<Option<V>, AggregatorError> {
         self.inner
             .read()
             .map(|read_locked_storage| {
@@ -49,9 +49,23 @@ impl<K: Ord, V: Clone> LockedBTreeMap<K, V> {
                 reason: e.to_string(),
             })
     }
+
+    pub fn get_latest_key(&self) -> Result<Option<K>, AggregatorError> {
+        self.inner
+            .read()
+            .map(|read_locked_storage| {
+                read_locked_storage
+                    .last_key_value()
+                    .map(|(k, _)| k)
+                    .cloned()
+            })
+            .map_err(|e| AggregatorError::StorageError {
+                reason: e.to_string(),
+            })
+    }
 }
 
-impl<K: Ord, V: Clone> Default for LockedBTreeMap<K, V> {
+impl<K: Ord + Clone, V: Clone> Default for LockedBTreeMap<K, V> {
     fn default() -> Self {
         Self::new()
     }

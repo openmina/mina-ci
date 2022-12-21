@@ -42,8 +42,7 @@ impl<K: Ord, V: Clone> LockedBTreeMap<K, V> {
             .read()
             .map(|read_locked_storage| {
                 read_locked_storage
-                    .iter()
-                    .next_back()
+                    .last_key_value()
                     .map(|(_, v)| v.clone())
             })
             .map_err(|e| AggregatorError::StorageError {

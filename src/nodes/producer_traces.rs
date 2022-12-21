@@ -70,7 +70,7 @@ async fn query_producer_internal_blocks(client: reqwest::Client, url: &str) -> A
     Ok(produced_blocks)
 }
 
-pub async fn get_most_recent_produced_blocks(environment: &AggregatorEnvironment) -> Vec<(String, String)> {
+pub async fn get_most_recent_produced_blocks(environment: &AggregatorEnvironment) -> Vec<(usize, String)> {
     let client = reqwest::Client::new();
 
     let urls = collect_producer_urls(environment);
@@ -86,6 +86,12 @@ pub async fn get_most_recent_produced_blocks(environment: &AggregatorEnvironment
             match b {
                 Ok((url, Ok(res))) => {
                     debug!("{url} OK");
+                    let res: Vec<(usize, String)> = res.into_iter()
+                        .map(|(height, state_hash)| {
+                            // parsing shold be OK, as it is always a positive number, but lets change the graphql to report a number as height
+                            (height.parse::<usize>().unwrap(), state_hash)
+                        })
+                        .collect();
                     collected.extend(res);
                 }
                 Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),

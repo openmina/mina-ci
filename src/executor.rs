@@ -66,7 +66,7 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
         sleep(environment.data_pull_interval).await;
 
         // let nodes_in_cluster: HashSet<String> = get_node_list_from_cluster(environment).await;
-        let blocks_on_most_recent_height = get_most_recent_produced_blocks(environment).await;
+        let mut blocks_on_most_recent_height = get_most_recent_produced_blocks(environment).await;
 
         if blocks_on_most_recent_height.is_empty() {
             info!("No blocks yet");
@@ -76,11 +76,12 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
         // Catch the case that the block producers have different height for their most recent blocks
         if blocks_on_most_recent_height.len() > 1 && !blocks_on_most_recent_height.windows(2).all(|w| w[0].0 == w[1].0) {
             info!("Height missmatch!");
-            continue;
+            // With this check we can eliminate the scenraio when a block producer lags behind, retaining only the highest block_height
+            let highest = blocks_on_most_recent_height.iter().max().unwrap().0;
+            blocks_on_most_recent_height.retain(|(height, _)| height == &highest);
         }
 
-        // this should be ok, but lets change the type in the trace to a number...
-        let height = blocks_on_most_recent_height[0].0.parse::<usize>().unwrap();
+        let height = blocks_on_most_recent_height[0].0;
         let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> = BTreeMap::new();
 
         info!("Height: {height}");

@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use futures::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn, error};
+use tracing::{debug, warn, error, info};
 
 use crate::{config::AggregatorEnvironment, AggregatorResult};
 
-use super::{query_node, GraphqlResponse, TraceSource, TraceStatus, collect_all_urls, AddrsAndPorts};
+use super::{query_node, GraphqlResponse, TraceSource, TraceStatus, collect_all_urls, AddrsAndPorts, ComponentType};
 
 const STRUCTURED_TRACE_PAYLOAD: &str = r#"{"query": "{ blockStructuredTrace(block_identifier: \"{STATE_HASH}\" ) }" }"#;
 
@@ -19,10 +19,12 @@ pub struct BlockStructuredTraceData {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockStructuredTrace {
     pub source: TraceSource,
-    pub global_slot: String,
+    pub blockchain_length_int: i64,
+    // pub global_slot: String,
     pub status: TraceStatus,
     pub total_time: f64,
     pub sections: Vec<BlockStructuredTraceSection>,
+    pub metadata: BlockStructuredTraceMetadata,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -36,8 +38,18 @@ pub struct BlockStructuredTraceCheckpoint {
     pub checkpoint: String,
     pub started_at: f64,
     pub duration: f64,
-    pub metadata: String,
+    pub metadata: serde_json::Value,
     pub checkpoints: Vec<BlockStructuredTraceCheckpoint>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct BlockStructuredTraceMetadata {
+    pub proof_count: Option<usize>,
+    pub txn_count: Option<usize>,
+    pub global_slot: String,
+    pub creator: String,
+    pub winner: String,
+    pub coinbase_receiver: String,
 }
 
 async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str) -> AggregatorResult<BlockStructuredTrace> {
@@ -52,7 +64,7 @@ async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str
 pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, state_hash: &str) -> BTreeMap<String, BlockStructuredTrace> {
     let client = reqwest::Client::new();
 
-    let urls = collect_all_urls(environment);
+    let urls = collect_all_urls(environment, ComponentType::Graphql);
     let bodies = stream::iter(urls)
         .map(|url| {
             let client = client.clone();
@@ -65,7 +77,7 @@ pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, s
         .fold(BTreeMap::<String, BlockStructuredTrace>::new(), |mut collected, b| async {
             match b {
                 Ok((url, Ok(res))) => {
-                    debug!("{url} OK");
+                    info!("{url} OK");
                     collected.insert(url, res);
                 }
                 Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),

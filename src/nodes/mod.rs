@@ -12,18 +12,24 @@ pub use producer_traces::*;
 pub mod node_block_traces;
 pub use node_block_traces::*;
 
-const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31308";
+const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31311";
 const PLAIN_NODE_COMPONENT: &str = "node";
 const SEED_NODE_COMPONENT: &str = "seed";
 const PRODUCER_NODE_COMPONENT: &str = "prod";
 const SNARKER_NODE_COMPONENT: &str = "snarker";
 const TRANSACTION_GENERTOR_NODE_COMPONENT: &str = "transaction-generator";
 
+const DEBUGGER_COMPONENT: &str = "bpf-debugger";
 const GRAPHQL_COMPONENT: &str = "graphql";
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GraphqlResponse<T> {
     pub data: T,
+}
+
+pub enum ComponentType {
+    Graphql,
+    Debugger,
 }
 
 async fn query_node(
@@ -39,13 +45,18 @@ async fn query_node(
         .await?)
 }
 
-fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
+pub fn collect_all_urls(environment: &AggregatorEnvironment, component: ComponentType) -> Vec<String> {
     let mut res: Vec<String> = vec![];
+
+    let component = match component {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+    };
 
     for seed_label in 1..=environment.seed_node_count {
         let url = format!(
             "{}/{}{}/{}",
-            CLUSTER_BASE_URL, SEED_NODE_COMPONENT, seed_label, GRAPHQL_COMPONENT
+            CLUSTER_BASE_URL, SEED_NODE_COMPONENT, seed_label, component
         );
         res.push(url);
     }
@@ -58,7 +69,7 @@ fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
     for snarker_label in 1..=environment.snarker_node_count {
         let url = format!(
             "{}/{}{}/{}",
-            CLUSTER_BASE_URL, SNARKER_NODE_COMPONENT, snarker_label, GRAPHQL_COMPONENT
+            CLUSTER_BASE_URL, SNARKER_NODE_COMPONENT, snarker_label, component
         );
         res.push(url);
     }
@@ -75,7 +86,7 @@ fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
     {
         let url = format!(
             "{}/{}/{}",
-            CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, GRAPHQL_COMPONENT
+            CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, component
         );
         res.push(url);
     }
@@ -85,12 +96,12 @@ fn collect_all_urls(environment: &AggregatorEnvironment) -> Vec<String> {
         let url = if plain_node_label < 10 {
             format!(
                 "{}/{}0{}/{}",
-                CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, GRAPHQL_COMPONENT
+                CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, component
             )
         } else {
             format!(
                 "{}/{}{}/{}",
-                CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, GRAPHQL_COMPONENT
+                CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, component
             )
         };
         res.push(url);

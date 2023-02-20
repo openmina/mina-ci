@@ -7,7 +7,7 @@ use crate::{
     AggregatorResult,
     config::{AggregatorEnvironment, CLUSTER_NODE_LIST_URL},
     debugger_data::{DebuggerCpnpResponse, NodeAddressCluster},
-    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster},
+    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster, collect_all_urls, ComponentType},
     IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport}, BlockTraceAggregatorStorage,
 };
 
@@ -18,12 +18,14 @@ async fn pull_debugger_data_cpnp(
 ) -> AggregatorResult<Vec<DebuggerCpnpResponse>> {
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
 
-    for debugger_label in 1..=environment.debugger_count {
-        info!("Pulling dbg{}", debugger_label);
+    let urls = collect_all_urls(environment, ComponentType::Debugger);
 
-        match get_height_data_cpnp(height, debugger_label, environment).await {
+    for url in urls.iter() {
+        info!("Pulling {url}");
+
+        match get_height_data_cpnp(height, url, environment).await {
             Ok(data) => collected.push(data),
-            Err(e) => warn!("dbg{} failed to provide data, reson: {}", debugger_label, e),
+            Err(e) => warn!("{url} failed to provide data, reson: {}", e),
         }
     }
 
@@ -32,19 +34,18 @@ async fn pull_debugger_data_cpnp(
 
 async fn get_height_data_cpnp(
     height: Option<usize>,
-    debugger_label: usize,
+    base_url: &str,
     environment: &AggregatorEnvironment,
 ) -> AggregatorResult<DebuggerCpnpResponse> {
     let url = if let Some(height) = height {
         format!(
-            "{}{}/{}/{}",
-            environment.debugger_base_url, debugger_label, environment.libp2p_ipc_encpoint, height
+            "{}/{}/{}",
+            base_url, environment.libp2p_ipc_encpoint, height
         )
     } else {
         format!(
-            "{}{}/{}/{}",
-            environment.debugger_base_url,
-            debugger_label,
+            "{}/{}/{}",
+            base_url,
             environment.libp2p_ipc_encpoint,
             "latest"
         )
@@ -93,7 +94,7 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
         info!("Information collected");
 
         for (_, state_hash) in blocks_on_most_recent_height {
-            info!("Collecting node traces for block {state_hash}...");
+            info!("Collecting node traces for block {state_hash}");
             let trace = get_block_trace_from_cluster(environment, &state_hash).await;
             info!("Traces collected for block {state_hash}");
             info!("Aggregating data and traces for block {state_hash}");
@@ -103,7 +104,7 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
                 },
                 Err(e) => warn!("{}", e),
             }
-            info!("Aggregation finished for block {state_hash}...");
+            info!("Aggregation finished for block {state_hash}");
         }
 
         let _ = block_trace_storage.insert(height, block_traces);

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::{nodes::{BlockStructuredTrace, TraceSource, DaemonMetrics, DaemonStatusDataSlim}, AggregatorResult};
+use crate::{nodes::{BlockStructuredTrace, TraceSource, DaemonMetrics, DaemonStatusDataSlim, TraceStatus}, AggregatorResult};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct BlockTraceAggregatorReport {
@@ -22,7 +22,7 @@ pub struct BlockTraceAggregatorReport {
 
 pub fn aggregate_block_traces(height: usize, state_hash: &str, node_infos: &BTreeMap<String, DaemonStatusDataSlim>, traces: BTreeMap<String, BlockStructuredTrace>) -> AggregatorResult<Vec<BlockTraceAggregatorReport>> {
     let mut external_receivers: Vec<(String, BlockStructuredTrace)> = traces.clone().into_iter()
-        .filter(|(_, trace)| matches!(trace.source, TraceSource::External))
+        .filter(|(_, trace)| matches!(trace.source, TraceSource::External) || matches!(trace.source, TraceSource::Catchup))
         .collect();
 
     external_receivers.sort_by(|(_, a_trace), (_, b_trace)| a_trace.sections[0].checkpoints[0].started_at.total_cmp(&b_trace.sections[0].checkpoints[0].started_at));
@@ -43,7 +43,7 @@ pub fn aggregate_block_traces(height: usize, state_hash: &str, node_infos: &BTre
             metrics: node_info.daemon_status.metrics.clone(),
             date_time: trace.map(|t| t.sections[0].checkpoints[0].started_at),
             receive_latency: trace.and_then(|t| first_received.map(|first_received| t.sections[0].checkpoints[0].started_at - first_received.1.sections[0].checkpoints[0].started_at)),
-            block_application: trace.map(|t| t.total_time),
+            block_application: trace.filter(|t| !matches!(t.status, TraceStatus::Pending)).map(|t| t.total_time),
         }
     })
     .collect();

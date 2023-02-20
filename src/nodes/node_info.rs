@@ -4,7 +4,7 @@ use futures::{stream, StreamExt};
 use serde::{Serialize, Deserialize};
 use tracing::{instrument, debug, warn, error, info};
 
-use crate::{config::AggregatorEnvironment, nodes::collect_all_urls, AggregatorResult};
+use crate::{config::AggregatorEnvironment, nodes::{collect_all_urls, ComponentType}, AggregatorResult};
 
 use super::{GraphqlResponse, query_node};
 
@@ -67,7 +67,7 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
 pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> BTreeMap<String, DaemonStatusDataSlim> {
     let client = reqwest::Client::new();
 
-    let urls = collect_all_urls(environment);
+    let urls = collect_all_urls(environment, ComponentType::Graphql);
     let bodies = stream::iter(urls)
         .map(|url| {
             let client = client.clone();
@@ -79,7 +79,7 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
         .fold(BTreeMap::new(), |mut collected, b| async {
             match b {
                 Ok((url, Ok(res))) => {
-                    debug!("{url} OK");
+                    info!("{url} OK");
                     collected.insert(url, res.into());
                 }
                 Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),

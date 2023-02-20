@@ -1,9 +1,5 @@
 use std::{env, time::Duration};
 
-// the debugger naming the cluster follows is dbg1, dbg2, ..., dbgN, where N is the number of debuggers running
-// full URL for reference http://1.k8.openmina.com:31308/dbg1/block/111
-// const DEBUGGER_COUNT: usize = 6;
-const DEBUGGER_BASE_URL_DEFAULT: &str = "http://1.k8.openmina.com:31308/dbg";
 const LIBP2P_IPC_URL_COMPONENT_DEFAULT: &str = "libp2p_ipc/block";
 // const OUTPUT_PATH: &str = "output";
 const RPC_PORT_DEFAULT: u16 = 8000;
@@ -18,19 +14,12 @@ pub struct AggregatorEnvironment {
     pub producer_node_count: usize,
     pub snarker_node_count: usize,
     pub transaction_generator_node_count: usize,
-    pub debugger_count: usize,
-    pub debugger_base_url: String,
     pub libp2p_ipc_encpoint: String,
     pub data_pull_interval: Duration,
     pub rpc_port: u16,
 }
 
 pub fn set_environment() -> AggregatorEnvironment {
-    let debugger_count = env::var("DEBUGGER_COUNT")
-        .expect("DEBUGGER_COUNT environment var must be set!")
-        .parse::<usize>()
-        .expect("DEBUGGER_COUNT should be a positve number (usize)");
-
     let plain_node_count = env::var("PLAIN_NODE_COUNT")
         .expect("PLAIN_NODE_COUNT environment var must be set!")
         .parse::<usize>()
@@ -56,10 +45,6 @@ pub fn set_environment() -> AggregatorEnvironment {
         .parse::<usize>()
         .expect("SNARKER_NODE_COUNT should be a positve number (usize)");
 
-    // TODO: parse as URL
-    let debugger_base_url =
-        env::var("DEBUGGER_BASE_URL").unwrap_or_else(|_| DEBUGGER_BASE_URL_DEFAULT.to_string());
-
     let libp2p_ipc_encpoint = env::var("LIBP2P_IPC_URL_COMPONENT")
         .unwrap_or_else(|_| LIBP2P_IPC_URL_COMPONENT_DEFAULT.to_string());
 
@@ -80,8 +65,6 @@ pub fn set_environment() -> AggregatorEnvironment {
         producer_node_count,
         snarker_node_count,
         transaction_generator_node_count,
-        debugger_count,
-        debugger_base_url,
         libp2p_ipc_encpoint,
         data_pull_interval,
         rpc_port,

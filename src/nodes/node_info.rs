@@ -69,20 +69,20 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
 
     let urls = collect_all_urls(environment, ComponentType::Graphql);
     let bodies = stream::iter(urls)
-        .map(|url| {
+        .map(|(tag, url)| {
             let client = client.clone();
-            tokio::spawn(async move { (url.clone(), query_node_info(client, &url).await) })
+            tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
         })
         .buffer_unordered(150);
 
     let collected = bodies
         .fold(BTreeMap::new(), |mut collected, b| async {
             match b {
-                Ok((url, Ok(res))) => {
-                    info!("{url} OK");
-                    collected.insert(url, res.into());
+                Ok((tag, Ok(res))) => {
+                    // info!("{tag} OK");
+                    collected.insert(tag, res.into());
                 }
-                Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
+                Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
                 Err(e) => error!("Tokio join error: {e}"),
             }
             collected

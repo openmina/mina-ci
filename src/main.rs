@@ -6,7 +6,7 @@ use tracing::info;
 
 use aggregators::{BlockHash, CpnpBlockPublication, BlockTraceAggregatorReport};
 
-use crate::{executor::poll_debuggers, storage::LockedBTreeMap};
+use crate::{executor::poll_node_traces, storage::LockedBTreeMap};
 
 pub mod aggregators;
 pub mod config;
@@ -35,7 +35,7 @@ async fn main() {
     let mut t_ipc_storage = ipc_storage.clone();
     let mut t_block_trace_storage = block_trace_storage.clone();
     let t_environment = environment.clone();
-    let handle = tokio::spawn(async move { poll_debuggers(&mut t_ipc_storage, &mut t_block_trace_storage, &t_environment).await });
+    let handle = tokio::spawn(async move { poll_node_traces(&mut t_ipc_storage, &mut t_block_trace_storage, &t_environment).await });
 
     info!("Creating rpc server");
     let rpc_server_handle = rpc::spawn_rpc_server(environment.rpc_port, ipc_storage.clone(), block_trace_storage.clone());

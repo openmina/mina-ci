@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +34,9 @@ pub enum ComponentType {
     Debugger,
 }
 
+/// <tag, URL>
+pub type Nodes = BTreeMap<String, String>;
+
 async fn query_node(
     client: reqwest::Client,
     url: &str,
@@ -45,79 +50,84 @@ async fn query_node(
         .await?)
 }
 
-pub fn collect_all_urls(environment: &AggregatorEnvironment, component: ComponentType) -> Vec<String> {
-    let mut res: Vec<String> = vec![];
+pub fn collect_all_urls(environment: &AggregatorEnvironment, component_type: ComponentType) -> Nodes {
+    let mut res: Nodes = BTreeMap::new();
 
-    let component = match component {
+    let component = match component_type {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
     };
 
-    for seed_label in 1..=environment.seed_node_count {
+    for seed_index in 1..=environment.seed_node_count {
+        let seed_label = format!("{}{}", SEED_NODE_COMPONENT, seed_index);
         let url = format!(
-            "{}/{}{}/{}",
-            CLUSTER_BASE_URL, SEED_NODE_COMPONENT, seed_label, component
+            "{}/{}/{}",
+            CLUSTER_BASE_URL, seed_label, component
         );
-        res.push(url);
+        res.insert(seed_label, url);
     }
 
     // producer nodes
-    let producers = collect_producer_urls(environment);
+    let producers = collect_producer_urls(environment, &component_type);
     res.extend(producers);
 
     // snarker nodes
-    for snarker_label in 1..=environment.snarker_node_count {
+    for snarker_index in 1..=environment.snarker_node_count {
+        let snarker_label = format!("{}{}", SNARKER_NODE_COMPONENT, snarker_index);
         let url = format!(
-            "{}/{}{}/{}",
-            CLUSTER_BASE_URL, SNARKER_NODE_COMPONENT, snarker_label, component
+            "{}/{}/{}",
+            CLUSTER_BASE_URL, snarker_label, component
         );
-        res.push(url);
+        res.insert(snarker_label, url);
     }
 
     // transaction generator nodes
-    // NOTE: No labels yet, only one transaction-generator
-    // for transaction_generator_label in 1..=environment.snarker_node_count {
-    //     let url = format!("{}/{}{}/{}", CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, transaction_generator_label, GRAPHQL_COMPONENT);
+    // NOTE: No indexs yet, only one transaction-generator
+    // for transaction_generator_index in 1..=environment.snarker_node_count {
+    //     let url = format!("{}/{}{}/{}", CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, transaction_generator_index, GRAPHQL_COMPONENT);
     //     match query_node_ip(&url).await {
     //         Ok(ip) => collected.push(ip),
     //         Err(e) => warn!("Seed node failed to respond, reason: {}", e),
     //     }
     // }
-    {
-        let url = format!(
-            "{}/{}/{}",
-            CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, component
-        );
-        res.push(url);
-    }
+    // {
+    //     let url = format!(
+    //         "{}/{}/{}",
+    //         CLUSTER_BASE_URL, TRANSACTION_GENERTOR_NODE_COMPONENT, component
+    //     );
+    //     res.push(url);
+    // }
 
     // plain nodes
-    for plain_node_label in 1..=environment.plain_node_count {
-        let url = if plain_node_label < 10 {
+    for plain_node_index in 1..=environment.plain_node_count {
+        let plain_node_label = format!("{}{}", PLAIN_NODE_COMPONENT, plain_node_index);
+        let url = 
             format!(
-                "{}/{}0{}/{}",
-                CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, component
-            )
-        } else {
-            format!(
-                "{}/{}{}/{}",
-                CLUSTER_BASE_URL, PLAIN_NODE_COMPONENT, plain_node_label, component
-            )
-        };
-        res.push(url);
+                "{}/{}/{}",
+                CLUSTER_BASE_URL, plain_node_label, component
+            );
+        res.insert(plain_node_label, url);
     }
 
     res
 }
 
-fn collect_producer_urls(environment: &AggregatorEnvironment) -> Vec<String> {
-    let mut res = vec![];
-    for producer_label in 1..=environment.producer_node_count {
+fn collect_producer_urls(_environment: &AggregatorEnvironment, component: &ComponentType) -> Nodes {
+    let component = match component {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+    };
+
+    let mut res = BTreeMap::new();
+    // TODO: special case, when the producers with prefix 0 have the same key...
+    let producers = ["01", "02", "03", "2", "3"];
+    for producer_index in producers {
+        let producer_label = format!("{}{}", PRODUCER_NODE_COMPONENT, producer_index);
         let url = format!(
-            "{}/{}{}/{}",
-            CLUSTER_BASE_URL, PRODUCER_NODE_COMPONENT, producer_label, GRAPHQL_COMPONENT
+            "{}/{}/{}",
+            CLUSTER_BASE_URL, producer_label, component
         );
-        res.push(url);
+        res.insert(producer_label, url);
     }
     res
 }

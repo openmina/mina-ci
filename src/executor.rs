@@ -6,26 +6,33 @@ use tracing::{error, info, instrument, warn};
 use crate::{
     AggregatorResult,
     config::{AggregatorEnvironment, CLUSTER_NODE_LIST_URL},
-    debugger_data::{DebuggerCpnpResponse, NodeAddressCluster},
-    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster, collect_all_urls, ComponentType},
-    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport}, BlockTraceAggregatorStorage,
+    debugger_data::{DebuggerCpnpResponse, NodeAddressCluster, NodeAddress, CpnpCapturedData},
+    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster, collect_all_urls, ComponentType, DaemonStatusDataSlim},
+    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport, aggregate_first_receive}, BlockTraceAggregatorStorage,
 };
 
 #[instrument]
 async fn pull_debugger_data_cpnp(
     height: Option<usize>,
     environment: &AggregatorEnvironment,
+    node_infos: &BTreeMap<String, DaemonStatusDataSlim>,
 ) -> AggregatorResult<Vec<DebuggerCpnpResponse>> {
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
 
-    let urls = collect_all_urls(environment, ComponentType::Debugger);
+    let nodes = collect_all_urls(environment, ComponentType::Debugger);
 
-    for url in urls.iter() {
-        info!("Pulling {url}");
-
+    for (tag, url) in nodes.iter() {
+        // info!("Pulling {}", url);
         match get_height_data_cpnp(height, url, environment).await {
-            Ok(data) => collected.push(data),
-            Err(e) => warn!("{url} failed to provide data, reson: {}", e),
+            Ok(data) => {
+                let modified_data = data.into_iter().map(|mut e| {
+                    e.node_address = NodeAddress(node_infos.get(tag).unwrap().daemon_status.addrs_and_ports.external_ip.clone());
+                    e.node_tag = tag.to_string();
+                    e
+                }).collect::<Vec<CpnpCapturedData>>();
+                collected.push(modified_data);
+            },
+            Err(e) => warn!("{} failed to provide data, reson: {}", url, e),
         }
     }
 
@@ -61,7 +68,7 @@ async fn get_height_data_cpnp(
 //         .map_err(|e| e.into())
 // }
 
-pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_storage: &mut BlockTraceAggregatorStorage, environment: &AggregatorEnvironment) {
+pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trace_storage: &mut BlockTraceAggregatorStorage, environment: &AggregatorEnvironment) {
     loop {
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
@@ -91,39 +98,49 @@ pub async fn poll_debuggers(ipc_storage: &mut IpcAggregatorStorage, block_trace_
         // collect node info
         info!("Collecting cluster nodes information");
         let node_infos = get_node_info_from_cluster(environment).await;
+        // println!("INF: {:#?}", node_infos);
         info!("Information collected");
 
-        for (_, state_hash) in blocks_on_most_recent_height {
-            info!("Collecting node traces for block {state_hash}");
-            let trace = get_block_trace_from_cluster(environment, &state_hash).await;
-            info!("Traces collected for block {state_hash}");
-            info!("Aggregating data and traces for block {state_hash}");
-            match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
-                Ok(data) => {
-                    block_traces.insert(state_hash.clone(), data);
-                },
-                Err(e) => warn!("{}", e),
-            }
-            info!("Aggregation finished for block {state_hash}");
-        }
+        // build a map that maps NodeIp to the node tag
+        let node_ip_to_tag_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
+            (v.daemon_status.addrs_and_ports.external_ip.to_string(), k.to_string())
+        })
+        .collect();
 
-        let _ = block_trace_storage.insert(height, block_traces);
-
-        // match pull_debugger_data_cpnp(None, environment).await {
-        //     Ok(data) => {
-        //         let (height, aggregated_data) =
-        //             match aggregate_first_receive(data, nodes_in_cluster) {
-        //                 Ok((height, aggregate_data)) => (height, aggregate_data),
-        //                 Err(e) => {
-        //                     warn!("{}", e);
-        //                     continue;
-        //                 }
-        //             };
-
-        //         // TODO: this is not a very good idea, capture the error!
-        //         let _ = storage.insert(height, aggregated_data);
+        // for (_, state_hash) in blocks_on_most_recent_height {
+        //     info!("Collecting node traces for block {state_hash}");
+        //     let trace = get_block_trace_from_cluster(environment, &state_hash).await;
+        //     info!("Traces collected for block {state_hash}");
+        //     info!("Aggregating trace data and traces for block {state_hash}");
+        //     match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
+        //         Ok(data) => {
+        //             block_traces.insert(state_hash.clone(), data);
+        //         },
+        //         Err(e) => warn!("{}", e),
         //     }
-        //     Err(e) => error!("Error in pulling data: {}", e),
+        //     info!("Trace aggregation finished for block {state_hash}");
         // }
+
+        // let _ = block_trace_storage.insert(height, block_traces);
+
+        // TODO: move this to a separate thread?
+        info!("Polling debuggers for height {height}");
+
+        match pull_debugger_data_cpnp(None, environment, &node_infos).await {
+            Ok(data) => {
+                let (height, aggregated_data) =
+                    match aggregate_first_receive(data, &node_ip_to_tag_map) {
+                        Ok((height, aggregate_data)) => (height, aggregate_data),
+                        Err(e) => {
+                            warn!("{}", e);
+                            continue;
+                        }
+                    };
+
+                // TODO: this is not a very good idea, capture the error!
+                let _ = ipc_storage.insert(height, aggregated_data);
+            }
+            Err(e) => error!("Error in pulling data: {}", e),
+        }
     }
 }

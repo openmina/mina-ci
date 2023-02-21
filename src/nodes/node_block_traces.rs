@@ -64,9 +64,9 @@ async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str
 pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, state_hash: &str) -> BTreeMap<String, BlockStructuredTrace> {
     let client = reqwest::Client::new();
 
-    let urls = collect_all_urls(environment, ComponentType::Graphql);
-    let bodies = stream::iter(urls)
-        .map(|url| {
+    let nodes = collect_all_urls(environment, ComponentType::Graphql);
+    let bodies = stream::iter(nodes)
+        .map(|(_, url)| {
             let client = client.clone();
             let state_hash = state_hash.to_string();
             tokio::spawn(async move { (url.clone(), query_block_traces(client, &url, &state_hash).await) })
@@ -77,7 +77,7 @@ pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, s
         .fold(BTreeMap::<String, BlockStructuredTrace>::new(), |mut collected, b| async {
             match b {
                 Ok((url, Ok(res))) => {
-                    info!("{url} OK");
+                    // info!("{url} OK");
                     collected.insert(url, res);
                 }
                 Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),

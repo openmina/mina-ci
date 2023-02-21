@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse, NodeAddressCluster};
 
+use crate::nodes::DaemonStatusDataSlim;
 use crate::{AggregatorError, AggregatorResult};
 
 pub type NodeIP = String;
@@ -18,7 +19,9 @@ pub type MessageGraph = Graph<String, u64, Directed>;
 #[derive(Debug, Default, Serialize, Clone)]
 pub struct CpnpLatencyAggregationData {
     pub message_source: NodeIP,
+    pub message_source_tag: String,
     pub node_address: NodeIP,
+    pub node_tag: String,
     pub receive_time: u64,
     pub latency_since_sent: Option<u64>,
     pub latency_since_block_publication: u64,
@@ -77,6 +80,7 @@ impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
 impl CpnpBlockPublication {
     pub fn init_with_source(
         source_node: NodeIP,
+        source_tag: &str,
         publish_time: u64,
         block_hash: String,
         height: usize,
@@ -87,6 +91,8 @@ impl CpnpBlockPublication {
 
         let source_data = CpnpLatencyAggregationData {
             message_source: source_node.clone(),
+            message_source_tag: source_tag.to_string(),
+            node_tag: source_tag.to_string(),
             node_address: source_node.clone(),
             receive_time: publish_time,
             latency_since_block_publication: 0,
@@ -111,8 +117,9 @@ impl CpnpBlockPublication {
 
 pub fn aggregate_first_receive(
     data: Vec<DebuggerCpnpResponse>,
-    nodes_in_cluster: HashSet<NodeIP>,
+    node_ip_to_tag_map: &BTreeMap<String, String>,
 ) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
+    // println!("Data: {:#?}", data);
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
 
@@ -139,10 +146,13 @@ pub fn aggregate_first_receive(
         })
         .collect();
 
+    println!("Publish messages: {:#?}", publish_messages);
+
     // FIXME
     let height = if !publish_messages.is_empty() {
         publish_messages[0].events[0].msg.height
     } else {
+        println!("Error: Height");
         return Err(AggregatorError::SourceNotReady);
     };
 
@@ -150,6 +160,7 @@ pub fn aggregate_first_receive(
         let block_hash = publish_message.events[0].hash.clone();
         let publication_data = CpnpBlockPublication::init_with_source(
             publish_message.node_address.ip(),
+            &publish_message.node_tag,
             publish_message.real_time_microseconds,
             block_hash,
             height,
@@ -159,9 +170,12 @@ pub fn aggregate_first_receive(
 
     for event in events.clone() {
         let block_data = if let Some(block_data) = by_block.get_mut(&event.events[0].hash) {
+            println!("Found matching event with hash: {}", event.events[0].hash);
             block_data
         } else {
-            return Err(AggregatorError::SourceNotReady);
+            println!("Ignoring event with hash: {}", event.events[0].hash);
+            // return Err(AggregatorError::SourceNotReady);
+            continue;
         };
 
         // ignore other event types
@@ -169,6 +183,7 @@ pub fn aggregate_first_receive(
         if event.events[0].r#type == "received_gossip" {
             let source_node = event.events[0].peer_address.as_ref().unwrap();
             let current_node = event.node_address;
+            let current_node_tag = event.node_tag;
 
             // this is a hack due to wrong timestamps...
             let source_receive_time =
@@ -180,7 +195,9 @@ pub fn aggregate_first_receive(
 
             let node_data = CpnpLatencyAggregationData {
                 message_source: source_node.ip(),
+                message_source_tag: node_ip_to_tag_map.get(&source_node.ip()).unwrap_or(&"".to_string()).to_string(),
                 node_address: current_node.ip(),
+                node_tag: current_node_tag,
                 receive_time: event.real_time_microseconds,
                 latency_since_sent: Some(
                     event
@@ -221,11 +238,11 @@ pub fn aggregate_first_receive(
         let graph_count = connected_components(&block_data.graph);
         let is_graph_cyclic = is_cyclic_directed(&block_data.graph);
 
-        let missing_nodes = nodes_in_cluster
-            .clone()
-            .into_iter()
-            .filter(|node| !block_data.unique_nodes.contains_key(node))
-            .collect();
+        // let missing_nodes = nodes_in_cluster
+        //     .clone()
+        //     .into_iter()
+        //     .filter(|node| !block_data.unique_nodes.contains_key(node))
+        //     .collect();
 
         let info = MessageGraphInfo {
             node_count,
@@ -233,7 +250,8 @@ pub fn aggregate_first_receive(
             source_nodes,
             graph_count,
             is_graph_cyclic,
-            missing_nodes,
+            // TODO
+            missing_nodes: vec![],
         };
 
         block_data.graph_info = Some(info);

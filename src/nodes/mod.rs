@@ -14,7 +14,7 @@ pub use producer_traces::*;
 pub mod node_block_traces;
 pub use node_block_traces::*;
 
-const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31311";
+const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31308";
 const PLAIN_NODE_COMPONENT: &str = "node";
 const SEED_NODE_COMPONENT: &str = "seed";
 const PRODUCER_NODE_COMPONENT: &str = "prod";

@@ -79,7 +79,7 @@ impl From<CpnpBlockPublication> for CpnpBlockPublicationFlattened {
 
 impl CpnpBlockPublication {
     pub fn init_with_source(
-        source_node: NodeIP,
+        source_node: String,
         source_tag: &str,
         publish_time: u64,
         block_hash: String,
@@ -117,9 +117,10 @@ impl CpnpBlockPublication {
 
 pub fn aggregate_first_receive(
     data: Vec<DebuggerCpnpResponse>,
-    node_ip_to_tag_map: &BTreeMap<String, String>,
+    peer_id_to_tag_map: &BTreeMap<String, String>,
 ) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
     // println!("Data: {:#?}", data);
+    println!("IP TO TAG MAP: {:#?}", peer_id_to_tag_map);
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
 
@@ -158,8 +159,9 @@ pub fn aggregate_first_receive(
 
     for publish_message in publish_messages {
         let block_hash = publish_message.events[0].hash.clone();
+        // let peer_id = publish_message.events[0].peer_id.as_ref().unwrap().clone();
         let publication_data = CpnpBlockPublication::init_with_source(
-            publish_message.node_address.ip(),
+            publish_message.node_tag.clone(),
             &publish_message.node_tag,
             publish_message.real_time_microseconds,
             block_hash,
@@ -170,10 +172,10 @@ pub fn aggregate_first_receive(
 
     for event in events.clone() {
         let block_data = if let Some(block_data) = by_block.get_mut(&event.events[0].hash) {
-            println!("Found matching event with hash: {}", event.events[0].hash);
+            // println!("Found matching event with hash: {}", event.events[0].hash);
             block_data
         } else {
-            println!("Ignoring event with hash: {}", event.events[0].hash);
+            // println!("Ignoring event with hash: {}", event.events[0].hash);
             // return Err(AggregatorError::SourceNotReady);
             continue;
         };
@@ -181,23 +183,24 @@ pub fn aggregate_first_receive(
         // ignore other event types
         // TODO: enum...
         if event.events[0].r#type == "received_gossip" {
-            let source_node = event.events[0].peer_address.as_ref().unwrap();
+            let source_node = event.events[0].peer_id.as_ref().unwrap();
+            let source_node_tag = peer_id_to_tag_map.get(source_node).unwrap_or(&"".to_string()).to_string();
             let current_node = event.node_address;
             let current_node_tag = event.node_tag;
 
             // this is a hack due to wrong timestamps...
             let source_receive_time =
-                if let Some(data) = block_data.node_latencies.get(&source_node.ip()) {
+                if let Some(data) = block_data.node_latencies.get(&source_node_tag) {
                     data.receive_time
                 } else {
                     u64::MAX
                 };
 
             let node_data = CpnpLatencyAggregationData {
-                message_source: source_node.ip(),
-                message_source_tag: node_ip_to_tag_map.get(&source_node.ip()).unwrap_or(&"".to_string()).to_string(),
+                message_source: source_node_tag.to_string(),
+                message_source_tag: peer_id_to_tag_map.get(source_node).unwrap_or(&"".to_string()).to_string(),
                 node_address: current_node.ip(),
-                node_tag: current_node_tag,
+                node_tag: current_node_tag.clone(),
                 receive_time: event.real_time_microseconds,
                 latency_since_sent: Some(
                     event
@@ -211,12 +214,12 @@ pub fn aggregate_first_receive(
 
             let source_graph_vertex = *block_data
                 .unique_nodes
-                .entry(source_node.ip())
-                .or_insert_with(|| block_data.graph.add_node(source_node.ip()));
+                .entry(source_node_tag.to_string())
+                .or_insert_with(|| block_data.graph.add_node(source_node_tag));
             let destination_graph_vertex = block_data
                 .unique_nodes
-                .entry(current_node.ip())
-                .or_insert_with(|| block_data.graph.add_node(current_node.ip()));
+                .entry(current_node_tag.clone())
+                .or_insert_with(|| block_data.graph.add_node(current_node_tag.clone()));
 
             block_data.graph.update_edge(
                 source_graph_vertex,
@@ -227,7 +230,7 @@ pub fn aggregate_first_receive(
             );
             block_data
                 .node_latencies
-                .insert(current_node.ip(), node_data);
+                .insert(current_node_tag, node_data);
         }
     }
 

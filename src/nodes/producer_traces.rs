@@ -25,7 +25,7 @@ pub struct BlockTraces {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockTrace {
     source: TraceSource,
-    blockchain_length: usize,
+    blockchain_length: String,
     state_hash: String,
     status: TraceStatus,
     total_time: f64,
@@ -46,7 +46,7 @@ pub enum TraceStatus {
     Pending,
 }
 
-async fn query_producer_internal_blocks(client: reqwest::Client, url: &str) -> AggregatorResult<Vec<(usize, String)>> {
+async fn query_producer_internal_blocks(client: reqwest::Client, url: &str) -> AggregatorResult<Vec<(String, String)>> {
     let res: GraphqlResponse<BlockTracesData> = query_node(client, url, TRACES_PAYLOAD.to_string())
         .await?
         .json()
@@ -62,7 +62,7 @@ async fn query_producer_internal_blocks(client: reqwest::Client, url: &str) -> A
         return Ok(vec![])
     };
 
-    let produced_blocks: Vec<(usize, String)> = traces.into_iter()
+    let produced_blocks: Vec<(String, String)> = traces.into_iter()
         .filter(|trace| trace.blockchain_length == most_recent_height && matches!(trace.source, TraceSource::Internal))
         .map(|trace| (trace.blockchain_length, trace.state_hash))
         .collect();
@@ -86,12 +86,12 @@ pub async fn get_most_recent_produced_blocks(environment: &AggregatorEnvironment
             match b {
                 Ok((url, Ok(res))) => {
                     debug!("{url} OK");
-                    // let res: Vec<(usize, String)> = res.into_iter()
-                    //     .map(|(height, state_hash)| {
-                    //         // parsing shold be OK, as it is always a positive number, but lets change the graphql to report a number as height
-                    //         (height.parse::<usize>().unwrap(), state_hash)
-                    //     })
-                    //     .collect();
+                    let res: Vec<(usize, String)> = res.into_iter()
+                        .map(|(height, state_hash)| {
+                            // parsing shold be OK, as it is always a positive number, but lets change the graphql to report a number as height
+                            (height.parse::<usize>().unwrap(), state_hash)
+                        })
+                        .collect();
                     collected.extend(res);
                 }
                 Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
@@ -102,6 +102,7 @@ pub async fn get_most_recent_produced_blocks(environment: &AggregatorEnvironment
         .await;
 
     info!("Collected {} produced blocks", collected.len());
+    println!("Blocks: {:#?}", collected);
 
     collected
 }

@@ -102,8 +102,14 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         info!("Information collected");
 
         // build a map that maps NodeIp to the node tag
-        let node_ip_to_tag_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
-            (v.daemon_status.addrs_and_ports.external_ip.to_string(), k.to_string())
+        // let node_ip_to_tag_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
+        //     (v.daemon_status.addrs_and_ports.external_ip.to_string(), k.to_string())
+        // })
+        // .collect();
+
+        // build a map that maps peer_id to tag
+        let peer_id_to_tag_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
+            (v.daemon_status.addrs_and_ports.peer.peer_id.clone(), k.to_string())
         })
         .collect();
 
@@ -126,10 +132,10 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
 
-        match pull_debugger_data_cpnp(None, environment, &node_infos).await {
+        match pull_debugger_data_cpnp(Some(height), environment, &node_infos).await {
             Ok(data) => {
                 let (height, aggregated_data) =
-                    match aggregate_first_receive(data, &node_ip_to_tag_map) {
+                    match aggregate_first_receive(data, &peer_id_to_tag_map) {
                         Ok((height, aggregate_data)) => (height, aggregate_data),
                         Err(e) => {
                             warn!("{}", e);

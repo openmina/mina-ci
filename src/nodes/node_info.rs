@@ -8,7 +8,7 @@ use crate::{config::AggregatorEnvironment, nodes::{collect_all_urls, ComponentTy
 
 use super::{GraphqlResponse, query_node};
 
-const NODE_INFO_PAYLOAD: &str = r#"{"query": "{ daemonStatus { addrsAndPorts { externalIp } syncStatus metrics { transactionPoolSize transactionsAddedToPool transactionPoolDiffReceived transactionPoolDiffBroadcasted } } snarkPool { prover } }" }"#;
+const NODE_INFO_PAYLOAD: &str = r#"{"query": "{ daemonStatus { addrsAndPorts { externalIp, peer { peerId } } syncStatus metrics { transactionPoolSize transactionsAddedToPool transactionPoolDiffReceived transactionPoolDiffBroadcasted } } snarkPool { prover } }" }"#;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -21,7 +21,14 @@ pub struct DaemonStatusData {
 #[serde(rename_all = "camelCase")]
 pub struct AddrsAndPorts {
     pub external_ip: String,
+    pub peer: Peer,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Peer {
+    pub peer_id: String,
+} 
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +75,7 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
     let client = reqwest::Client::new();
 
     let urls = collect_all_urls(environment, ComponentType::Graphql);
+    println!("URLS: {:#?}", urls);
     let bodies = stream::iter(urls)
         .map(|(tag, url)| {
             let client = client.clone();
@@ -90,6 +98,9 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
         .await;
 
     info!("Collected {} nodes", collected.len());
+
+    println!("TAGS COLLECTED: {:#?}", collected.keys());
+    println!("IPS COLLECTED: {:#?}", collected.values());
 
     collected
 }

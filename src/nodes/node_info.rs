@@ -100,7 +100,7 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
     info!("Collected {} nodes", collected.len());
 
     println!("TAGS COLLECTED: {:#?}", collected.keys());
-    println!("IPS COLLECTED: {:#?}", collected.values());
+    // println!("IPS COLLECTED: {:#?}", collected.values());
 
     collected
 }

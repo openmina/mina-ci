@@ -82,12 +82,15 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
             continue;
         }
 
+        // blocks_on_most_recent_height.sort_unstable();
+        // blocks_on_most_recent_height.dedup();
+
         // Catch the case that the block producers have different height for their most recent blocks
         if blocks_on_most_recent_height.len() > 1 && !blocks_on_most_recent_height.windows(2).all(|w| w[0].0 == w[1].0) {
             info!("Height missmatch on producers! Using highest block_height");
             // With this check we can eliminate the scenraio when a block producer lags behind, retaining only the highest block_height
             let highest = blocks_on_most_recent_height.iter().max().unwrap().0;
-            blocks_on_most_recent_height.retain(|(height, _)| height == &highest);
+            blocks_on_most_recent_height.retain(|(height, _, _)| height == &highest);
         }
 
         let height = blocks_on_most_recent_height[0].0;
@@ -113,21 +116,37 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         })
         .collect();
 
-        // for (_, state_hash) in blocks_on_most_recent_height {
-        //     info!("Collecting node traces for block {state_hash}");
-        //     let trace = get_block_trace_from_cluster(environment, &state_hash).await;
-        //     info!("Traces collected for block {state_hash}");
-        //     info!("Aggregating trace data and traces for block {state_hash}");
-        //     match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
-        //         Ok(data) => {
-        //             block_traces.insert(state_hash.clone(), data);
-        //         },
-        //         Err(e) => warn!("{}", e),
-        //     }
-        //     info!("Trace aggregation finished for block {state_hash}");
-        // }
+        // let tag_to_peer_id_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
+        //     (k.to_string(), v.daemon_status.addrs_and_ports.peer.peer_id.clone())
+        // })
+        // .collect();
 
-        // let _ = block_trace_storage.insert(height, block_traces);
+        // let peer_id_to_state_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height.iter().map(|(_, state_hash, tag)| {
+        //     let peer_id = tag_to_peer_id_map.get(tag).unwrap();
+        //     (peer_id.to_string(), state_hash.to_string())
+        // }).collect();
+
+        let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height.iter().map(|(_, state_hash, tag)| {
+            // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
+            (tag.to_string(), state_hash.to_string())
+        }).collect();
+
+        for (_, state_hash, _) in blocks_on_most_recent_height {
+            info!("Collecting node traces for block {state_hash}");
+            let trace = get_block_trace_from_cluster(environment, &state_hash).await;
+            info!("Traces collected for block {state_hash}");
+            info!("Aggregating trace data and traces for block {state_hash}");
+            // println!("TRACES KEYS: {:#?}", trace.keys());
+            match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
+                Ok(data) => {
+                    block_traces.insert(state_hash.clone(), data);
+                },
+                Err(e) => warn!("{}", e),
+            }
+            info!("Trace aggregation finished for block {state_hash}");
+        }
+
+        let _ = block_trace_storage.insert(height, block_traces);
 
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
@@ -135,7 +154,7 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         match pull_debugger_data_cpnp(Some(height), environment, &node_infos).await {
             Ok(data) => {
                 let (height, aggregated_data) =
-                    match aggregate_first_receive(data, &peer_id_to_tag_map) {
+                    match aggregate_first_receive(data, &peer_id_to_tag_map, &tag_to_block_hash_map) {
                         Ok((height, aggregate_data)) => (height, aggregate_data),
                         Err(e) => {
                             warn!("{}", e);

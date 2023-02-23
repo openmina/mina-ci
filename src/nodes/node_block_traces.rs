@@ -53,10 +53,19 @@ pub struct BlockStructuredTraceMetadata {
 }
 
 async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str) -> AggregatorResult<BlockStructuredTrace> {
-    let res: GraphqlResponse<BlockStructuredTraceData> = query_node(client, url, STRUCTURED_TRACE_PAYLOAD.replace("{STATE_HASH}", state_hash))
+    // let res: GraphqlResponse<BlockStructuredTraceData> = query_node(client, url, STRUCTURED_TRACE_PAYLOAD.replace("{STATE_HASH}", state_hash))
+    //     .await?
+    //     .json()
+    //     .await?;
+
+    // hack until we remove duplicate fields from the trace response
+    let response = query_node(client, url, STRUCTURED_TRACE_PAYLOAD.replace("{STATE_HASH}", state_hash))
         .await?
-        .json()
+        .text()
         .await?;
+
+    let raw: serde_json::Value = serde_json::from_str(&response)?;
+    let res: GraphqlResponse<BlockStructuredTraceData> = serde_json::from_value(raw)?;
 
     Ok(res.data.block_structured_trace)
 }
@@ -66,21 +75,21 @@ pub async fn get_block_trace_from_cluster(environment: &AggregatorEnvironment, s
 
     let nodes = collect_all_urls(environment, ComponentType::Graphql);
     let bodies = stream::iter(nodes)
-        .map(|(_, url)| {
+        .map(|(tag, url)| {
             let client = client.clone();
             let state_hash = state_hash.to_string();
-            tokio::spawn(async move { (url.clone(), query_block_traces(client, &url, &state_hash).await) })
+            tokio::spawn(async move { (tag.clone(), query_block_traces(client, &url, &state_hash).await) })
         })
         .buffer_unordered(150);
 
     let collected: BTreeMap<String, BlockStructuredTrace> = bodies
         .fold(BTreeMap::<String, BlockStructuredTrace>::new(), |mut collected, b| async {
             match b {
-                Ok((url, Ok(res))) => {
+                Ok((tag, Ok(res))) => {
                     // info!("{url} OK");
-                    collected.insert(url, res);
+                    collected.insert(tag, res);
                 }
-                Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
+                Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
                 Err(e) => error!("Tokio join error: {e}"),
             }
             collected

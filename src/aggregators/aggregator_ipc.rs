@@ -24,7 +24,9 @@ pub struct CpnpLatencyAggregationData {
     pub node_tag: String,
     pub receive_time: u64,
     pub latency_since_sent: Option<u64>,
+    pub latency_since_sent_seconds: Option<f64>,
     pub latency_since_block_publication: u64,
+    pub latency_since_block_publication_seconds: f64,
 }
 
 #[derive(Debug, Default, Serialize, Clone)]
@@ -97,6 +99,8 @@ impl CpnpBlockPublication {
             receive_time: publish_time,
             latency_since_block_publication: 0,
             latency_since_sent: Some(0),
+            latency_since_block_publication_seconds: 0.0,
+            latency_since_sent_seconds: Some(0.0),
         };
 
         node_latencies.insert(source_node.clone(), source_data);
@@ -118,9 +122,10 @@ impl CpnpBlockPublication {
 pub fn aggregate_first_receive(
     data: Vec<DebuggerCpnpResponse>,
     peer_id_to_tag_map: &BTreeMap<String, String>,
+    tag_to_block_hash_map: &BTreeMap<String, String>,
 ) -> AggregatorResult<(usize, BTreeMap<BlockHash, CpnpBlockPublication>)> {
     // println!("Data: {:#?}", data);
-    println!("IP TO TAG MAP: {:#?}", peer_id_to_tag_map);
+    // println!("PEER_ID TO TAG MAP: {:#?}", peer_id_to_tag_map);
     // there could be multiple blocks for a specific height, so we need to differentioat by block hash
     let mut by_block: BTreeMap<BlockHash, CpnpBlockPublication> = BTreeMap::new();
 
@@ -134,7 +139,7 @@ pub fn aggregate_first_receive(
     // TODO: try to remove this additional iteration somehow as an optimization
     // Note: When we are sure the debugger timestamps are correct, we can remove this as by sorting by timestamp, the pusblish event will always
     //       preceed the receive events
-    let publish_messages: Vec<CpnpCapturedData> = events
+    let mut publish_messages: Vec<CpnpCapturedData> = events
         .clone()
         .into_iter()
         .filter(|e| {
@@ -147,7 +152,9 @@ pub fn aggregate_first_receive(
         })
         .collect();
 
-    println!("Publish messages: {:#?}", publish_messages);
+    publish_messages.sort_by_key(|m| m.real_time_microseconds);
+
+    // println!("Publish messages: {:#?}", publish_messages);
 
     // FIXME
     let height = if !publish_messages.is_empty() {
@@ -157,21 +164,58 @@ pub fn aggregate_first_receive(
         return Err(AggregatorError::SourceNotReady);
     };
 
+    let mut message_hash_to_block_hash_map: BTreeMap<String, String> = BTreeMap::new();
+
+    println!("TAG TO BLOCK HASH: {:#?}", tag_to_block_hash_map);
+
     for publish_message in publish_messages {
-        let block_hash = publish_message.events[0].hash.clone();
+        // let block_hash = publish_message.events[0].hash.clone();
+        let block_hash = if let Some(block_hash) = tag_to_block_hash_map.get(&publish_message.node_tag) {
+            block_hash.to_string()
+        } else {
+            continue;
+        };
+
+        if let Some(block_data) = by_block.get_mut(&block_hash) {
+            let source_data = CpnpLatencyAggregationData {
+                message_source: publish_message.node_tag.clone(),
+                message_source_tag: publish_message.node_tag.clone(),
+                node_tag: publish_message.node_tag.clone(),
+                node_address: publish_message.node_tag.clone(),
+                receive_time: publish_message.real_time_microseconds,
+                latency_since_block_publication: 0,
+                latency_since_sent: Some(0),
+                latency_since_block_publication_seconds: 0.0,
+                latency_since_sent_seconds: Some(0.0),
+            };
+            block_data.node_latencies.insert(publish_message.node_tag.clone(), source_data);
+            block_data.unique_nodes.insert(publish_message.node_tag.clone(), block_data.graph.add_node(publish_message.node_tag.clone()));
+        } else {
+            let publication_data = CpnpBlockPublication::init_with_source(
+                publish_message.node_tag.clone(),
+                &publish_message.node_tag,
+                publish_message.real_time_microseconds,
+                block_hash.clone(),
+                height,
+            );
+            by_block.insert(block_hash.clone(), publication_data);
+        }
+
         // let peer_id = publish_message.events[0].peer_id.as_ref().unwrap().clone();
-        let publication_data = CpnpBlockPublication::init_with_source(
-            publish_message.node_tag.clone(),
-            &publish_message.node_tag,
-            publish_message.real_time_microseconds,
-            block_hash,
-            height,
-        );
-        by_block.insert(publish_message.events[0].hash.clone(), publication_data);
+        
+        message_hash_to_block_hash_map.insert(publish_message.events[0].hash.clone(), block_hash);
     }
 
+    println!("MESSAGE HASH TO BLOCK HASH: {:#?}", message_hash_to_block_hash_map);
+
     for event in events.clone() {
-        let block_data = if let Some(block_data) = by_block.get_mut(&event.events[0].hash) {
+        let block_hash = if let Some(block_hash) = message_hash_to_block_hash_map.get(&event.events[0].hash) {
+            block_hash.to_string()
+        } else {
+            println!("Not found {}", event.events[0].hash);
+            panic!();
+        };
+        let block_data = if let Some(block_data) = by_block.get_mut(&block_hash) {
             // println!("Found matching event with hash: {}", event.events[0].hash);
             block_data
         } else {
@@ -187,6 +231,11 @@ pub fn aggregate_first_receive(
             let source_node_tag = peer_id_to_tag_map.get(source_node).unwrap_or(&"".to_string()).to_string();
             let current_node = event.node_address;
             let current_node_tag = event.node_tag;
+
+            // skip if we already saw a message for this node with with this block
+            if block_data.node_latencies.get(&current_node_tag).is_some() {
+                continue;
+            }
 
             // this is a hack due to wrong timestamps...
             let source_receive_time =
@@ -210,6 +259,10 @@ pub fn aggregate_first_receive(
                 latency_since_block_publication: event
                     .real_time_microseconds
                     .saturating_sub(block_data.publish_time),
+                latency_since_sent_seconds: Some(
+                    microseconds_u64_to_f64(event.real_time_microseconds.saturating_sub(source_receive_time)),
+                ),
+                latency_since_block_publication_seconds: microseconds_u64_to_f64(event.real_time_microseconds.saturating_sub(block_data.publish_time)),
             };
 
             let source_graph_vertex = *block_data
@@ -297,6 +350,12 @@ fn get_source_nodes(graph: &MessageGraph) -> Vec<String> {
         }
     }
     sources
+}
+
+/// TODO: this is dangerous, validate the conversion!
+fn microseconds_u64_to_f64(micros: u64) -> f64 {
+    let micros = micros as f64;
+    micros / 1_000_000.0
 }
 
 // #[cfg(test)]

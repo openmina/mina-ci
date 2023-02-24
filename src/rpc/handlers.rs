@@ -1,7 +1,8 @@
-use reqwest::StatusCode;
+use std::collections::BTreeMap;
 
+use reqwest::StatusCode;
 use crate::{
-    IpcAggregatorStorage, aggregators::{CpnpBlockPublicationFlattened, CpnpBlockPublication, BlockTraceAggregatorReport}, BlockTraceAggregatorStorage,
+    IpcAggregatorStorage, aggregators::{CpnpBlockPublicationFlattened, CpnpBlockPublication, BlockTraceAggregatorReport}, BlockTraceAggregatorStorage, cross_validation::{cross_validate_ipc_with_traces, ValidationReport},
 };
 
 pub async fn get_aggregated_block_receive_data(
@@ -109,3 +110,41 @@ pub async fn get_aggregated_block_trace_data_latest_height(
         ))
     }
 }
+
+pub async fn cross_validate_ipc_with_traces_handler(
+    height: usize,
+    block_trace_storage: BlockTraceAggregatorStorage,
+    ipc_storage: IpcAggregatorStorage,
+) -> Result<impl warp::Reply, warp::reject::Rejection> {
+    let traces = if let Ok(Some(data)) = block_trace_storage.get(height) {
+        data
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
+            StatusCode::OK,
+        ))
+    };
+
+    let ipc_data = if let Ok(Some(data)) = ipc_storage.get(height) {
+        data
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
+            StatusCode::OK,
+        ))
+    };
+
+    let res = cross_validate_ipc_with_traces(traces, ipc_data);
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&res),
+        StatusCode::OK,
+    ))
+}
+
+// fn empty_json<T: Serialize + Default>(res: T) -> impl warp::Reply {
+//     warp::reply::with_status(
+//         warp::reply::json(&T::default()),
+//         StatusCode::OK,
+//     )
+// }

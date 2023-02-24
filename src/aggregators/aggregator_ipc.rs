@@ -213,7 +213,8 @@ pub fn aggregate_first_receive(
             block_hash.to_string()
         } else {
             println!("Not found {}", event.events[0].hash);
-            panic!();
+            // panic!();
+            continue;
         };
         let block_data = if let Some(block_data) = by_block.get_mut(&block_hash) {
             // println!("Found matching event with hash: {}", event.events[0].hash);

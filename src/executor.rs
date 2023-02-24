@@ -8,7 +8,7 @@ use crate::{
     config::{AggregatorEnvironment, CLUSTER_NODE_LIST_URL},
     debugger_data::{DebuggerCpnpResponse, NodeAddressCluster, NodeAddress, CpnpCapturedData},
     nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster, collect_all_urls, ComponentType, DaemonStatusDataSlim},
-    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport, aggregate_first_receive}, BlockTraceAggregatorStorage,
+    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport, aggregate_first_receive}, BlockTraceAggregatorStorage, cross_validation::cross_validate_ipc_with_traces,
 };
 
 #[instrument]

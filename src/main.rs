@@ -16,6 +16,7 @@ pub mod error;
 pub mod nodes;
 pub mod rpc;
 pub mod storage;
+mod cross_validation;
 
 pub type AggregatorResult<T> = Result<T, AggregatorError>;
 

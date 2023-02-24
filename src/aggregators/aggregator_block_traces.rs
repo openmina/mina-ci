@@ -6,18 +6,18 @@ use crate::{nodes::{BlockStructuredTrace, TraceSource, DaemonMetrics, DaemonStat
 
 #[derive(Clone, Debug, Serialize)]
 pub struct BlockTraceAggregatorReport {
-    height: usize,
-    block_hash: String,
-    node: String,
-    node_address: String,
-    date_time: Option<f64>,
-    source: Option<TraceSource>,
-    sync_status: String,
-    snark_pool_size: usize,
-    transaction_pool_size: usize,
-    metrics: DaemonMetrics,
-    receive_latency: Option<f64>,
-    block_application: Option<f64>,
+    pub height: usize,
+    pub block_hash: String,
+    pub node: String,
+    pub node_address: String,
+    pub date_time: Option<f64>,
+    pub source: Option<TraceSource>,
+    pub sync_status: String,
+    pub snark_pool_size: usize,
+    pub transaction_pool_size: usize,
+    pub metrics: DaemonMetrics,
+    pub receive_latency: Option<f64>,
+    pub block_application: Option<f64>,
 }
 
 pub fn aggregate_block_traces(height: usize, state_hash: &str, node_infos: &BTreeMap<String, DaemonStatusDataSlim>, traces: BTreeMap<String, BlockStructuredTrace>) -> AggregatorResult<Vec<BlockTraceAggregatorReport>> {

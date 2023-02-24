@@ -75,7 +75,7 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
     let client = reqwest::Client::new();
 
     let urls = collect_all_urls(environment, ComponentType::Graphql);
-    println!("URLS: {:#?}", urls);
+    // println!("URLS: {:#?}", urls);
     let bodies = stream::iter(urls)
         .map(|(tag, url)| {
             let client = client.clone();
@@ -99,7 +99,7 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
 
     info!("Collected {} nodes", collected.len());
 
-    println!("TAGS COLLECTED: {:#?}", collected.keys());
+    // println!("TAGS COLLECTED: {:#?}", collected.keys());
     // println!("IPS COLLECTED: {:#?}", collected.values());
 
     collected

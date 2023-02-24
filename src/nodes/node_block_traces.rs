@@ -46,10 +46,10 @@ pub struct BlockStructuredTraceCheckpoint {
 pub struct BlockStructuredTraceMetadata {
     pub proof_count: Option<usize>,
     pub txn_count: Option<usize>,
-    pub global_slot: String,
-    pub creator: String,
-    pub winner: String,
-    pub coinbase_receiver: String,
+    pub global_slot: Option<String>,
+    pub creator: Option<String>,
+    pub winner: Option<String>,
+    pub coinbase_receiver: Option<String>,
 }
 
 async fn query_block_traces(client: reqwest::Client, url: &str, state_hash: &str) -> AggregatorResult<BlockStructuredTrace> {

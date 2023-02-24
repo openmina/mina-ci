@@ -1,14 +1,14 @@
-use std::collections::{HashSet, BTreeMap};
+use std::collections::BTreeMap;
 
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
 use crate::{
     AggregatorResult,
-    config::{AggregatorEnvironment, CLUSTER_NODE_LIST_URL},
-    debugger_data::{DebuggerCpnpResponse, NodeAddressCluster, NodeAddress, CpnpCapturedData},
-    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, BlockStructuredTrace, get_node_info_from_cluster, collect_all_urls, ComponentType, DaemonStatusDataSlim},
-    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport, aggregate_first_receive}, BlockTraceAggregatorStorage, cross_validation::cross_validate_ipc_with_traces,
+    config::{AggregatorEnvironment},
+    debugger_data::{DebuggerCpnpResponse, NodeAddress, CpnpCapturedData},
+    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, get_node_info_from_cluster, collect_all_urls, ComponentType, DaemonStatusDataSlim},
+    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport, aggregate_first_receive}, BlockTraceAggregatorStorage,
 };
 
 #[instrument]

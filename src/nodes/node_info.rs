@@ -1,8 +1,8 @@
-use std::collections::{HashSet, BTreeMap};
+use std::collections::{BTreeMap};
 
 use futures::{stream, StreamExt};
 use serde::{Serialize, Deserialize};
-use tracing::{instrument, debug, warn, error, info};
+use tracing::{instrument, warn, error, info};
 
 use crate::{config::AggregatorEnvironment, nodes::{collect_all_urls, ComponentType}, AggregatorResult};
 

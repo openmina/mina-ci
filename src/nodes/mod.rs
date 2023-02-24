@@ -19,7 +19,7 @@ const PLAIN_NODE_COMPONENT: &str = "node";
 const SEED_NODE_COMPONENT: &str = "seed";
 const PRODUCER_NODE_COMPONENT: &str = "prod";
 const SNARKER_NODE_COMPONENT: &str = "snarker";
-const TRANSACTION_GENERTOR_NODE_COMPONENT: &str = "transaction-generator";
+// const TRANSACTION_GENERTOR_NODE_COMPONENT: &str = "transaction-generator";
 
 const DEBUGGER_COMPONENT: &str = "bpf-debugger";
 const GRAPHQL_COMPONENT: &str = "graphql";

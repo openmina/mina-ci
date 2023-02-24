@@ -1,15 +1,13 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Write;
+use std::collections::{BTreeMap, HashMap};
 
 use petgraph::algo::{connected_components, is_cyclic_directed};
-use petgraph::dot::Dot;
+// use petgraph::dot::Dot;
 use petgraph::prelude::*;
 use petgraph::{Directed, Graph};
 use serde::Serialize;
 
-use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse, NodeAddressCluster};
+use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse};
 
-use crate::nodes::DaemonStatusDataSlim;
 use crate::{AggregatorError, AggregatorResult};
 
 pub type NodeIP = String;

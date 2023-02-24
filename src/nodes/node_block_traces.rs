@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use futures::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn, error, info};
+use tracing::{warn, error};
 
 use crate::{config::AggregatorEnvironment, AggregatorResult};
 
-use super::{query_node, GraphqlResponse, TraceSource, TraceStatus, collect_all_urls, AddrsAndPorts, ComponentType};
+use super::{query_node, GraphqlResponse, TraceSource, TraceStatus, collect_all_urls, ComponentType};
 
 const STRUCTURED_TRACE_PAYLOAD: &str = r#"{"query": "{ blockStructuredTrace(block_identifier: \"{STATE_HASH}\" ) }" }"#;
 

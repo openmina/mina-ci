@@ -37,6 +37,7 @@ pub enum TraceSource {
     External,
     Unknown,
     Catchup,
+    Reconstruct,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -66,6 +67,11 @@ async fn query_producer_internal_blocks(client: reqwest::Client, url: &str, tag:
         .filter(|trace| trace.blockchain_length == most_recent_height && matches!(trace.source, TraceSource::Internal))
         .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
         .collect();
+
+    // let produced_blocks: Vec<(usize, String, String)> = traces.into_iter()
+    //     .filter(|trace| trace.blockchain_length == most_recent_height && matches!(trace.source, TraceSource::Internal))
+    //     .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
+    //     .collect();
 
     Ok(produced_blocks)
 }

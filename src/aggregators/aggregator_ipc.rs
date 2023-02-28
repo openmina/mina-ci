@@ -226,8 +226,8 @@ pub fn aggregate_first_receive(
         // ignore other event types
         // TODO: enum...
         if event.events[0].r#type == "received_gossip" {
-            let source_node = event.events[0].peer_id.as_ref().unwrap();
-            let source_node_tag = peer_id_to_tag_map.get(source_node).unwrap_or(&"".to_string()).to_string();
+            let source_node = event.events[0].peer_id.as_ref().unwrap_or(&String::default()).to_string();
+            let source_node_tag = peer_id_to_tag_map.get(&source_node).unwrap_or(&"".to_string()).to_string();
             let current_node = event.node_address;
             let current_node_tag = event.node_tag;
 
@@ -246,7 +246,7 @@ pub fn aggregate_first_receive(
 
             let node_data = CpnpLatencyAggregationData {
                 message_source: source_node_tag.to_string(),
-                message_source_tag: peer_id_to_tag_map.get(source_node).unwrap_or(&"".to_string()).to_string(),
+                message_source_tag: peer_id_to_tag_map.get(&source_node).unwrap_or(&"".to_string()).to_string(),
                 node_address: current_node.ip(),
                 node_tag: current_node_tag.clone(),
                 receive_time: event.real_time_microseconds,

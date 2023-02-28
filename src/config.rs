@@ -3,7 +3,7 @@ use std::{env, time::Duration};
 const LIBP2P_IPC_URL_COMPONENT_DEFAULT: &str = "libp2p_ipc/block";
 // const OUTPUT_PATH: &str = "output";
 const RPC_PORT_DEFAULT: u16 = 8000;
-pub const CLUSTER_NODE_LIST_URL: &str = "http://1.k8.openmina.com:31308/nodes";
+pub const CLUSTER_NODE_LIST_URL: &str = "http://1.k8.openmina.com:31311/nodes";
 
 const DATA_PULL_INTERVAL_DEFAULT: u64 = 10;
 

@@ -6,9 +6,10 @@ use crate::aggregators::{BlockTraceAggregatorReport, BlockHash, CpnpBlockPublica
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct ValidationReport {
-    pub measured_latency_comparison: BTreeMap<String, f64>,
+    // pub measured_latency_comparison: BTreeMap<String, f64>,
     pub received_time_comparison: BTreeMap<String, f64>,
     pub all_nodes_present: bool,
+    pub missing_nodes: Vec<String>,
 }
 
 // TODO: unwraps
@@ -27,10 +28,16 @@ pub fn cross_validate_ipc_with_traces(
         report.all_nodes_present = block_traces.len() == ipc_node_latencies.len();
 
         for trace in block_traces {
-            let ipc_latencies = ipc_node_latencies.get(&trace.node).unwrap();
+            let ipc_latencies = if let Some(ipc_latencies) = ipc_node_latencies.get(&trace.node) {
+                ipc_latencies
+            } else {
+                println!("No ipc data for {}", trace.node);
+                report.missing_nodes.push(trace.node.clone());
+                continue;
+            };
 
-            let latency_difference = trace.receive_latency.unwrap() - ipc_latencies.latency_since_block_publication_seconds;
-            report.measured_latency_comparison.insert(trace.node.clone(), latency_difference);
+            // let latency_difference = trace.receive_latency.unwrap() - ipc_latencies.latency_since_block_publication_seconds;
+            // report.measured_latency_comparison.insert(trace.node.clone(), latency_difference);
 
             let receive_time_difference = trace.date_time.unwrap() - ((ipc_latencies.receive_time as f64) / 1_000_000.0);
             report.received_time_comparison.insert(trace.node.clone(), receive_time_difference);
@@ -39,6 +46,5 @@ pub fn cross_validate_ipc_with_traces(
         by_block.insert(block_hash.clone(), report);
     }
 
-    // println!("REPORT: {:#?}", by_block);
     by_block
 }

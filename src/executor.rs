@@ -26,7 +26,7 @@ async fn pull_debugger_data_cpnp(
         match get_height_data_cpnp(height, url, environment).await {
             Ok(data) => {
                 let modified_data = data.into_iter().map(|mut e| {
-                    e.node_address = NodeAddress(node_infos.get(tag).unwrap().daemon_status.addrs_and_ports.external_ip.clone());
+                    // e.node_address = NodeAddress(node_infos.get(tag).unwrap().daemon_status.addrs_and_ports.external_ip.clone());
                     e.node_tag = tag.to_string();
                     e
                 }).collect::<Vec<CpnpCapturedData>>();

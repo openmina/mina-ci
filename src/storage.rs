@@ -40,11 +40,7 @@ impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
     pub fn get_latest_value(&self) -> Result<Option<V>, AggregatorError> {
         self.inner
             .read()
-            .map(|read_locked_storage| {
-                read_locked_storage
-                    .last_key_value()
-                    .map(|(_, v)| v.clone())
-            })
+            .map(|read_locked_storage| read_locked_storage.last_key_value().map(|(_, v)| v.clone()))
             .map_err(|e| AggregatorError::StorageError {
                 reason: e.to_string(),
             })

@@ -168,11 +168,12 @@ pub fn aggregate_first_receive(
 
     for publish_message in publish_messages {
         // let block_hash = publish_message.events[0].hash.clone();
-        let block_hash = if let Some(block_hash) = tag_to_block_hash_map.get(&publish_message.node_tag) {
-            block_hash.to_string()
-        } else {
-            continue;
-        };
+        let block_hash =
+            if let Some(block_hash) = tag_to_block_hash_map.get(&publish_message.node_tag) {
+                block_hash.to_string()
+            } else {
+                continue;
+            };
 
         if let Some(block_data) = by_block.get_mut(&block_hash) {
             let source_data = CpnpLatencyAggregationData {
@@ -186,8 +187,13 @@ pub fn aggregate_first_receive(
                 latency_since_block_publication_seconds: 0.0,
                 latency_since_sent_seconds: Some(0.0),
             };
-            block_data.node_latencies.insert(publish_message.node_tag.clone(), source_data);
-            block_data.unique_nodes.insert(publish_message.node_tag.clone(), block_data.graph.add_node(publish_message.node_tag.clone()));
+            block_data
+                .node_latencies
+                .insert(publish_message.node_tag.clone(), source_data);
+            block_data.unique_nodes.insert(
+                publish_message.node_tag.clone(),
+                block_data.graph.add_node(publish_message.node_tag.clone()),
+            );
         } else {
             let publication_data = CpnpBlockPublication::init_with_source(
                 publish_message.node_tag.clone(),
@@ -200,20 +206,24 @@ pub fn aggregate_first_receive(
         }
 
         // let peer_id = publish_message.events[0].peer_id.as_ref().unwrap().clone();
-        
+
         message_hash_to_block_hash_map.insert(publish_message.events[0].hash.clone(), block_hash);
     }
 
-    println!("MESSAGE HASH TO BLOCK HASH: {:#?}", message_hash_to_block_hash_map);
+    println!(
+        "MESSAGE HASH TO BLOCK HASH: {:#?}",
+        message_hash_to_block_hash_map
+    );
 
     for event in events.clone() {
-        let block_hash = if let Some(block_hash) = message_hash_to_block_hash_map.get(&event.events[0].hash) {
-            block_hash.to_string()
-        } else {
-            println!("Not found {}", event.events[0].hash);
-            // panic!();
-            continue;
-        };
+        let block_hash =
+            if let Some(block_hash) = message_hash_to_block_hash_map.get(&event.events[0].hash) {
+                block_hash.to_string()
+            } else {
+                println!("Not found {}", event.events[0].hash);
+                // panic!();
+                continue;
+            };
         let block_data = if let Some(block_data) = by_block.get_mut(&block_hash) {
             // println!("Found matching event with hash: {}", event.events[0].hash);
             block_data
@@ -226,8 +236,15 @@ pub fn aggregate_first_receive(
         // ignore other event types
         // TODO: enum...
         if event.events[0].r#type == "received_gossip" {
-            let source_node = event.events[0].peer_id.as_ref().unwrap_or(&String::default()).to_string();
-            let source_node_tag = peer_id_to_tag_map.get(&source_node).unwrap_or(&"".to_string()).to_string();
+            let source_node = event.events[0]
+                .peer_id
+                .as_ref()
+                .unwrap_or(&String::default())
+                .to_string();
+            let source_node_tag = peer_id_to_tag_map
+                .get(&source_node)
+                .unwrap_or(&"".to_string())
+                .to_string();
             let current_node = event.node_address;
             let current_node_tag = event.node_tag;
 
@@ -246,7 +263,10 @@ pub fn aggregate_first_receive(
 
             let node_data = CpnpLatencyAggregationData {
                 message_source: source_node_tag.to_string(),
-                message_source_tag: peer_id_to_tag_map.get(&source_node).unwrap_or(&"".to_string()).to_string(),
+                message_source_tag: peer_id_to_tag_map
+                    .get(&source_node)
+                    .unwrap_or(&"".to_string())
+                    .to_string(),
                 node_address: current_node.ip(),
                 node_tag: current_node_tag.clone(),
                 receive_time: event.real_time_microseconds,
@@ -258,10 +278,16 @@ pub fn aggregate_first_receive(
                 latency_since_block_publication: event
                     .real_time_microseconds
                     .saturating_sub(block_data.publish_time),
-                latency_since_sent_seconds: Some(
-                    microseconds_u64_to_f64(event.real_time_microseconds.saturating_sub(source_receive_time)),
+                latency_since_sent_seconds: Some(microseconds_u64_to_f64(
+                    event
+                        .real_time_microseconds
+                        .saturating_sub(source_receive_time),
+                )),
+                latency_since_block_publication_seconds: microseconds_u64_to_f64(
+                    event
+                        .real_time_microseconds
+                        .saturating_sub(block_data.publish_time),
                 ),
-                latency_since_block_publication_seconds: microseconds_u64_to_f64(event.real_time_microseconds.saturating_sub(block_data.publish_time)),
             };
 
             let source_graph_vertex = *block_data

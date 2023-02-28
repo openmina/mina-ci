@@ -4,11 +4,14 @@ use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
 use crate::{
-    AggregatorResult,
-    config::{AggregatorEnvironment},
-    debugger_data::{DebuggerCpnpResponse, NodeAddress, CpnpCapturedData},
-    nodes::{ get_most_recent_produced_blocks, get_block_trace_from_cluster, get_node_info_from_cluster, collect_all_urls, ComponentType, DaemonStatusDataSlim},
-    IpcAggregatorStorage, aggregators::{aggregate_block_traces, BlockTraceAggregatorReport, aggregate_first_receive}, BlockTraceAggregatorStorage,
+    aggregators::{aggregate_block_traces, aggregate_first_receive, BlockTraceAggregatorReport},
+    config::AggregatorEnvironment,
+    debugger_data::{CpnpCapturedData, DebuggerCpnpResponse, NodeAddress},
+    nodes::{
+        collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
+        get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
+    },
+    AggregatorResult, BlockTraceAggregatorStorage, IpcAggregatorStorage,
 };
 
 #[instrument]
@@ -25,13 +28,16 @@ async fn pull_debugger_data_cpnp(
         // info!("Pulling {}", url);
         match get_height_data_cpnp(height, url, environment).await {
             Ok(data) => {
-                let modified_data = data.into_iter().map(|mut e| {
-                    // e.node_address = NodeAddress(node_infos.get(tag).unwrap().daemon_status.addrs_and_ports.external_ip.clone());
-                    e.node_tag = tag.to_string();
-                    e
-                }).collect::<Vec<CpnpCapturedData>>();
+                let modified_data = data
+                    .into_iter()
+                    .map(|mut e| {
+                        // e.node_address = NodeAddress(node_infos.get(tag).unwrap().daemon_status.addrs_and_ports.external_ip.clone());
+                        e.node_tag = tag.to_string();
+                        e
+                    })
+                    .collect::<Vec<CpnpCapturedData>>();
                 collected.push(modified_data);
-            },
+            }
             Err(e) => warn!("{} failed to provide data, reson: {}", url, e),
         }
     }
@@ -52,9 +58,7 @@ async fn get_height_data_cpnp(
     } else {
         format!(
             "{}/{}/{}",
-            base_url,
-            environment.libp2p_ipc_encpoint,
-            "latest"
+            base_url, environment.libp2p_ipc_encpoint, "latest"
         )
     };
     reqwest::get(url).await?.json().await.map_err(|e| e.into())
@@ -68,7 +72,11 @@ async fn get_height_data_cpnp(
 //         .map_err(|e| e.into())
 // }
 
-pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trace_storage: &mut BlockTraceAggregatorStorage, environment: &AggregatorEnvironment) {
+pub async fn poll_node_traces(
+    ipc_storage: &mut IpcAggregatorStorage,
+    block_trace_storage: &mut BlockTraceAggregatorStorage,
+    environment: &AggregatorEnvironment,
+) {
     loop {
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
@@ -86,7 +94,11 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         // blocks_on_most_recent_height.dedup();
 
         // Catch the case that the block producers have different height for their most recent blocks
-        if blocks_on_most_recent_height.len() > 1 && !blocks_on_most_recent_height.windows(2).all(|w| w[0].0 == w[1].0) {
+        if blocks_on_most_recent_height.len() > 1
+            && !blocks_on_most_recent_height
+                .windows(2)
+                .all(|w| w[0].0 == w[1].0)
+        {
             info!("Height missmatch on producers! Using highest block_height");
             // With this check we can eliminate the scenraio when a block producer lags behind, retaining only the highest block_height
             let highest = blocks_on_most_recent_height.iter().max().unwrap().0;
@@ -111,10 +123,15 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         // .collect();
 
         // build a map that maps peer_id to tag
-        let peer_id_to_tag_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
-            (v.daemon_status.addrs_and_ports.peer.peer_id.clone(), k.to_string())
-        })
-        .collect();
+        let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
+            .iter()
+            .map(|(k, v)| {
+                (
+                    v.daemon_status.addrs_and_ports.peer.peer_id.clone(),
+                    k.to_string(),
+                )
+            })
+            .collect();
 
         // let tag_to_peer_id_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
         //     (k.to_string(), v.daemon_status.addrs_and_ports.peer.peer_id.clone())
@@ -126,10 +143,13 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
         //     (peer_id.to_string(), state_hash.to_string())
         // }).collect();
 
-        let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height.iter().map(|(_, state_hash, tag)| {
-            // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
-            (tag.to_string(), state_hash.to_string())
-        }).collect();
+        let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height
+            .iter()
+            .map(|(_, state_hash, tag)| {
+                // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
+                (tag.to_string(), state_hash.to_string())
+            })
+            .collect();
 
         for (_, state_hash, _) in blocks_on_most_recent_height {
             info!("Collecting node traces for block {state_hash}");
@@ -140,7 +160,7 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
             match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
                 Ok(data) => {
                     block_traces.insert(state_hash.clone(), data);
-                },
+                }
                 Err(e) => warn!("{}", e),
             }
             info!("Trace aggregation finished for block {state_hash}");
@@ -153,14 +173,17 @@ pub async fn poll_node_traces(ipc_storage: &mut IpcAggregatorStorage, block_trac
 
         match pull_debugger_data_cpnp(Some(height), environment, &node_infos).await {
             Ok(data) => {
-                let (height, aggregated_data) =
-                    match aggregate_first_receive(data, &peer_id_to_tag_map, &tag_to_block_hash_map) {
-                        Ok((height, aggregate_data)) => (height, aggregate_data),
-                        Err(e) => {
-                            warn!("{}", e);
-                            continue;
-                        }
-                    };
+                let (height, aggregated_data) = match aggregate_first_receive(
+                    data,
+                    &peer_id_to_tag_map,
+                    &tag_to_block_hash_map,
+                ) {
+                    Ok((height, aggregate_data)) => (height, aggregate_data),
+                    Err(e) => {
+                        warn!("{}", e);
+                        continue;
+                    }
+                };
 
                 // TODO: this is not a very good idea, capture the error!
                 let _ = ipc_storage.insert(height, aggregated_data);

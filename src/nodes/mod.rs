@@ -50,7 +50,10 @@ async fn query_node(
         .await?)
 }
 
-pub fn collect_all_urls(environment: &AggregatorEnvironment, component_type: ComponentType) -> Nodes {
+pub fn collect_all_urls(
+    environment: &AggregatorEnvironment,
+    component_type: ComponentType,
+) -> Nodes {
     let mut res: Nodes = BTreeMap::new();
 
     let component = match component_type {
@@ -60,10 +63,7 @@ pub fn collect_all_urls(environment: &AggregatorEnvironment, component_type: Com
 
     for seed_index in 1..=environment.seed_node_count {
         let seed_label = format!("{}{}", SEED_NODE_COMPONENT, seed_index);
-        let url = format!(
-            "{}/{}/{}",
-            CLUSTER_BASE_URL, seed_label, component
-        );
+        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, seed_label, component);
         res.insert(seed_label, url);
     }
 
@@ -74,10 +74,7 @@ pub fn collect_all_urls(environment: &AggregatorEnvironment, component_type: Com
     // snarker nodes
     for snarker_index in 1..=environment.snarker_node_count {
         let snarker_label = format!("{}{}", SNARKER_NODE_COMPONENT, snarker_index);
-        let url = format!(
-            "{}/{}/{}",
-            CLUSTER_BASE_URL, snarker_label, component
-        );
+        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, snarker_label, component);
         res.insert(snarker_label, url);
     }
 
@@ -101,11 +98,7 @@ pub fn collect_all_urls(environment: &AggregatorEnvironment, component_type: Com
     // plain nodes
     for plain_node_index in 1..=environment.plain_node_count {
         let plain_node_label = format!("{}{}", PLAIN_NODE_COMPONENT, plain_node_index);
-        let url = 
-            format!(
-                "{}/{}/{}",
-                CLUSTER_BASE_URL, plain_node_label, component
-            );
+        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, plain_node_label, component);
         res.insert(plain_node_label, url);
     }
 
@@ -123,10 +116,7 @@ fn collect_producer_urls(_environment: &AggregatorEnvironment, component: &Compo
     let producers = ["01", "02", "03", "2", "3"];
     for producer_index in producers {
         let producer_label = format!("{}{}", PRODUCER_NODE_COMPONENT, producer_index);
-        let url = format!(
-            "{}/{}/{}",
-            CLUSTER_BASE_URL, producer_label, component
-        );
+        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, producer_label, component);
         res.insert(producer_label, url);
     }
     res

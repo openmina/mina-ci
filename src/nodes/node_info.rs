@@ -1,12 +1,16 @@
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 
 use futures::{stream, StreamExt};
-use serde::{Serialize, Deserialize};
-use tracing::{instrument, warn, error, info};
+use serde::{Deserialize, Serialize};
+use tracing::{error, info, instrument, warn};
 
-use crate::{config::AggregatorEnvironment, nodes::{collect_all_urls, ComponentType}, AggregatorResult};
+use crate::{
+    config::AggregatorEnvironment,
+    nodes::{collect_all_urls, ComponentType},
+    AggregatorResult,
+};
 
-use super::{GraphqlResponse, query_node};
+use super::{query_node, GraphqlResponse};
 
 const NODE_INFO_PAYLOAD: &str = r#"{"query": "{ daemonStatus { addrsAndPorts { externalIp, peer { peerId } } syncStatus metrics { transactionPoolSize transactionsAddedToPool transactionPoolDiffReceived transactionPoolDiffBroadcasted } } snarkPool { prover } }" }"#;
 
@@ -28,7 +32,7 @@ pub struct AddrsAndPorts {
 #[serde(rename_all = "camelCase")]
 pub struct Peer {
     pub peer_id: String,
-} 
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +75,9 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
 
 #[instrument]
 /// Fires requests to all the nodes and collects their IPs (requests are parallel)
-pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> BTreeMap<String, DaemonStatusDataSlim> {
+pub async fn get_node_info_from_cluster(
+    environment: &AggregatorEnvironment,
+) -> BTreeMap<String, DaemonStatusDataSlim> {
     let client = reqwest::Client::new();
 
     let urls = collect_all_urls(environment, ComponentType::Graphql);
@@ -106,9 +112,10 @@ pub async fn get_node_info_from_cluster(environment: &AggregatorEnvironment) -> 
 }
 
 async fn query_node_info(client: reqwest::Client, url: &str) -> AggregatorResult<DaemonStatusData> {
-    let res: GraphqlResponse<DaemonStatusData> = query_node(client, url, NODE_INFO_PAYLOAD.to_string())
-        .await?
-        .json()
-        .await?;
+    let res: GraphqlResponse<DaemonStatusData> =
+        query_node(client, url, NODE_INFO_PAYLOAD.to_string())
+            .await?
+            .json()
+            .await?;
     Ok(res.data)
 }

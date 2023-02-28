@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::aggregators::{BlockTraceAggregatorReport, BlockHash, CpnpBlockPublication};
+use crate::aggregators::{BlockHash, BlockTraceAggregatorReport, CpnpBlockPublication};
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct ValidationReport {
@@ -15,7 +15,7 @@ pub struct ValidationReport {
 // TODO: unwraps
 pub fn cross_validate_ipc_with_traces(
     traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>>,
-    ipc_reports: BTreeMap<BlockHash, CpnpBlockPublication>
+    ipc_reports: BTreeMap<BlockHash, CpnpBlockPublication>,
 ) -> BTreeMap<String, ValidationReport> {
     let mut by_block: BTreeMap<String, ValidationReport> = BTreeMap::new();
 
@@ -39,8 +39,11 @@ pub fn cross_validate_ipc_with_traces(
             // let latency_difference = trace.receive_latency.unwrap() - ipc_latencies.latency_since_block_publication_seconds;
             // report.measured_latency_comparison.insert(trace.node.clone(), latency_difference);
 
-            let receive_time_difference = trace.date_time.unwrap() - ((ipc_latencies.receive_time as f64) / 1_000_000.0);
-            report.received_time_comparison.insert(trace.node.clone(), receive_time_difference);
+            let receive_time_difference =
+                trace.date_time.unwrap() - ((ipc_latencies.receive_time as f64) / 1_000_000.0);
+            report
+                .received_time_comparison
+                .insert(trace.node.clone(), receive_time_difference);
         }
 
         by_block.insert(block_hash.clone(), report);

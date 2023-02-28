@@ -1,9 +1,11 @@
 use warp::Filter;
 
-use crate::{IpcAggregatorStorage, BlockTraceAggregatorStorage};
+use crate::{BlockTraceAggregatorStorage, IpcAggregatorStorage};
 
 use super::handlers::{
-    get_aggregated_block_receive_data, get_aggregated_block_receive_data_latest, get_aggregated_block_trace_data_latest, get_aggregated_block_trace_data, get_aggregated_block_trace_data_latest_height, cross_validate_ipc_with_traces_handler,
+    cross_validate_ipc_with_traces_handler, get_aggregated_block_receive_data,
+    get_aggregated_block_receive_data_latest, get_aggregated_block_trace_data,
+    get_aggregated_block_trace_data_latest, get_aggregated_block_trace_data_latest_height,
 };
 
 pub fn filters(
@@ -20,8 +22,13 @@ pub fn filters(
         .or(block_receive_aggregation_latest(ipc_storage.clone()))
         .or(block_traces_aggregation(block_trace_storage.clone()))
         .or(block_traces_aggregation_latest(block_trace_storage.clone()))
-        .or(block_traces_aggregation_latest_height(block_trace_storage.clone()))
-        .or(cross_validate_ipc_with_traces(block_trace_storage, ipc_storage))
+        .or(block_traces_aggregation_latest_height(
+            block_trace_storage.clone(),
+        ))
+        .or(cross_validate_ipc_with_traces(
+            block_trace_storage,
+            ipc_storage,
+        ))
         .with(cors)
 }
 
@@ -47,27 +54,27 @@ fn block_traces_aggregation_latest(
     block_trace_storage: BlockTraceAggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("traces" / "latest")
-    .and(warp::get())
-    .and(with_block_trace_storage(block_trace_storage))
-    .and_then(get_aggregated_block_trace_data_latest)
+        .and(warp::get())
+        .and(with_block_trace_storage(block_trace_storage))
+        .and_then(get_aggregated_block_trace_data_latest)
 }
 
 fn block_traces_aggregation_latest_height(
     block_trace_storage: BlockTraceAggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("traces" / "latest" / "height")
-    .and(warp::get())
-    .and(with_block_trace_storage(block_trace_storage))
-    .and_then(get_aggregated_block_trace_data_latest_height)
+        .and(warp::get())
+        .and(with_block_trace_storage(block_trace_storage))
+        .and_then(get_aggregated_block_trace_data_latest_height)
 }
 
 fn block_traces_aggregation(
     block_trace_storage: BlockTraceAggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("traces" / usize)
-    .and(warp::get())
-    .and(with_block_trace_storage(block_trace_storage))
-    .and_then(get_aggregated_block_trace_data)
+        .and(warp::get())
+        .and(with_block_trace_storage(block_trace_storage))
+        .and_then(get_aggregated_block_trace_data)
 }
 
 fn cross_validate_ipc_with_traces(
@@ -75,10 +82,10 @@ fn cross_validate_ipc_with_traces(
     ipc_storage: IpcAggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("validate" / "ipc" / usize)
-    .and(warp::get())
-    .and(with_block_trace_storage(block_trace_storage))
-    .and(with_ipc_storage(ipc_storage))
-    .and_then(cross_validate_ipc_with_traces_handler)
+        .and(warp::get())
+        .and(with_block_trace_storage(block_trace_storage))
+        .and(with_ipc_storage(ipc_storage))
+        .and_then(cross_validate_ipc_with_traces_handler)
 }
 
 fn with_ipc_storage(
@@ -89,6 +96,7 @@ fn with_ipc_storage(
 
 fn with_block_trace_storage(
     block_trace_storage: BlockTraceAggregatorStorage,
-) -> impl Filter<Extract = (BlockTraceAggregatorStorage,), Error = std::convert::Infallible> + Clone {
+) -> impl Filter<Extract = (BlockTraceAggregatorStorage,), Error = std::convert::Infallible> + Clone
+{
     warp::any().map(move || block_trace_storage.clone())
 }

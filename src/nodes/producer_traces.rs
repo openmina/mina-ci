@@ -10,7 +10,7 @@ use crate::{
 
 use super::{query_node, GraphqlResponse};
 
-const TRACES_PAYLOAD: &str = r#"{"query": "{ blockTraces }" }"#;
+const TRACES_PAYLOAD: &str = r#"{"query": "{ blockTraces(maxLength: 50) }" }"#;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -53,6 +53,7 @@ async fn query_producer_internal_blocks(
     client: reqwest::Client,
     url: &str,
     tag: &str,
+    // block_count: usize,
 ) -> AggregatorResult<Vec<(String, String, String)>> {
     let res: GraphqlResponse<BlockTracesData> = query_node(client, url, TRACES_PAYLOAD.to_string())
         .await?
@@ -78,16 +79,12 @@ async fn query_producer_internal_blocks(
         .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
         .collect();
 
-    // let produced_blocks: Vec<(usize, String, String)> = traces.into_iter()
-    //     .filter(|trace| trace.blockchain_length == most_recent_height && matches!(trace.source, TraceSource::Internal))
-    //     .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
-    //     .collect();
-
     Ok(produced_blocks)
 }
 
 pub async fn get_most_recent_produced_blocks(
     environment: &AggregatorEnvironment,
+    // block_count: usize,
 ) -> Vec<(usize, String, String)> {
     let client = reqwest::Client::new();
 

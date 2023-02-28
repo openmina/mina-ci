@@ -46,6 +46,33 @@ impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
             })
     }
 
+    pub fn get_latest_n_values(&self, n: usize) -> Result<Vec<V>, AggregatorError> {
+        self.inner
+            .read()
+            .map(|read_locked_storage| {
+                read_locked_storage
+                    .values()
+                    .cloned()
+                    .rev()
+                    .take(n)
+                    .collect()
+            })
+            .map_err(|e| AggregatorError::StorageError {
+                reason: e.to_string(),
+            })
+    }
+
+    pub fn get_count(&self) -> Result<usize, AggregatorError> {
+        self.inner
+            .read()
+            .map(|read_locked_storage| {
+                read_locked_storage.len()
+            })
+            .map_err(|e| AggregatorError::StorageError {
+                reason: e.to_string(),
+            })
+    }
+
     pub fn get_latest_key(&self) -> Result<Option<K>, AggregatorError> {
         self.inner
             .read()

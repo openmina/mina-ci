@@ -1,16 +1,18 @@
 use warp::Filter;
 
-use crate::{BlockTraceAggregatorStorage, IpcAggregatorStorage};
+use crate::{BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage};
 
 use super::handlers::{
-    cross_validate_ipc_with_traces_handler, get_aggregated_block_receive_data,
-    get_aggregated_block_receive_data_latest, get_aggregated_block_trace_data,
-    get_aggregated_block_trace_data_latest, get_aggregated_block_trace_data_latest_height,
+    aggregate_cross_validations_handler, cross_validate_ipc_with_traces_handler,
+    get_aggregated_block_receive_data, get_aggregated_block_receive_data_latest,
+    get_aggregated_block_trace_data, get_aggregated_block_trace_data_latest,
+    get_aggregated_block_trace_data_latest_height, QueryOptions, get_cross_validations_count_handler,
 };
 
 pub fn filters(
     ipc_storage: IpcAggregatorStorage,
     block_trace_storage: BlockTraceAggregatorStorage,
+    cross_validation_storage: CrossValidationStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     // Allow cors from any origin
     let cors = warp::cors()
@@ -19,16 +21,15 @@ pub fn filters(
         .allow_methods(vec!["GET"]);
 
     block_receive_aggregation(ipc_storage.clone())
-        .or(block_receive_aggregation_latest(ipc_storage.clone()))
+        .or(block_receive_aggregation_latest(ipc_storage))
         .or(block_traces_aggregation(block_trace_storage.clone()))
         .or(block_traces_aggregation_latest(block_trace_storage.clone()))
-        .or(block_traces_aggregation_latest_height(
-            block_trace_storage.clone(),
-        ))
+        .or(block_traces_aggregation_latest_height(block_trace_storage))
         .or(cross_validate_ipc_with_traces(
-            block_trace_storage,
-            ipc_storage,
+            cross_validation_storage.clone(),
         ))
+        .or(cross_validation_counts(cross_validation_storage.clone()))
+        .or(aggregate_cross_validations_filter(cross_validation_storage))
         .with(cors)
 }
 
@@ -78,14 +79,31 @@ fn block_traces_aggregation(
 }
 
 fn cross_validate_ipc_with_traces(
-    block_trace_storage: BlockTraceAggregatorStorage,
-    ipc_storage: IpcAggregatorStorage,
+    cross_validation_storage: CrossValidationStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("validate" / "ipc" / usize)
         .and(warp::get())
-        .and(with_block_trace_storage(block_trace_storage))
-        .and(with_ipc_storage(ipc_storage))
+        .and(with_cross_validation_storage(cross_validation_storage))
         .and_then(cross_validate_ipc_with_traces_handler)
+}
+
+fn aggregate_cross_validations_filter(
+    cross_validation_storage: CrossValidationStorage,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("validate" / "ipc")
+        .and(warp::get())
+        .and(warp::query::<QueryOptions>())
+        .and(with_cross_validation_storage(cross_validation_storage))
+        .and_then(aggregate_cross_validations_handler)
+}
+
+fn cross_validation_counts(
+    cross_validation_storage: CrossValidationStorage,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("validate" / "ipc" / "count")
+        .and(warp::get())
+        .and(with_cross_validation_storage(cross_validation_storage))
+        .and_then(get_cross_validations_count_handler)
 }
 
 fn with_ipc_storage(
@@ -100,3 +118,11 @@ fn with_block_trace_storage(
 {
     warp::any().map(move || block_trace_storage.clone())
 }
+
+fn with_cross_validation_storage(
+    cross_validation_storage: CrossValidationStorage,
+) -> impl Filter<Extract = (CrossValidationStorage,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || cross_validation_storage.clone())
+}
+
+// cross_validation_storage

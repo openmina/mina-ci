@@ -21,6 +21,7 @@ pub struct BlockTraceAggregatorReport {
     pub metrics: DaemonMetrics,
     pub receive_latency: Option<f64>,
     pub block_application: Option<f64>,
+    pub is_producer: bool,
 }
 
 pub fn aggregate_block_traces(
@@ -47,6 +48,12 @@ pub fn aggregate_block_traces(
             .total_cmp(&b_trace.sections[0].checkpoints[0].started_at)
     });
 
+    // println!("IT: {:#?}", internal_receivers);
+    let producer_nodes: Vec<String> = internal_receivers
+        .iter()
+        .map(|(tag, _)| tag.to_string())
+        .collect();
+
     // TODO: Should be the timestamp the first producer finished?
     // TraceSource::Internal -> sort by ~sent_time=(started_at + total_time)
     let first_received = internal_receivers.get(0);
@@ -57,6 +64,7 @@ pub fn aggregate_block_traces(
             let trace = traces.get(node);
             BlockTraceAggregatorReport {
                 block_hash: state_hash.to_string(),
+                is_producer: producer_nodes.contains(node), // TODO
                 height,
                 node: node.to_string(),
                 node_address: node_info.daemon_status.addrs_and_ports.external_ip.clone(),

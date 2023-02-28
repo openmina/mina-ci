@@ -6,12 +6,13 @@ use tracing::{error, info, instrument, warn};
 use crate::{
     aggregators::{aggregate_block_traces, aggregate_first_receive, BlockTraceAggregatorReport},
     config::AggregatorEnvironment,
-    debugger_data::{CpnpCapturedData, DebuggerCpnpResponse, NodeAddress},
+    cross_validation::cross_validate_ipc_with_traces,
+    debugger_data::{CpnpCapturedData, DebuggerCpnpResponse},
     nodes::{
         collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
         get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
     },
-    AggregatorResult, BlockTraceAggregatorStorage, IpcAggregatorStorage,
+    AggregatorResult, BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage,
 };
 
 #[instrument]
@@ -72,9 +73,99 @@ async fn get_height_data_cpnp(
 //         .map_err(|e| e.into())
 // }
 
+// pub async fn rehydrate_storage(
+//     ipc_storage: &mut IpcAggregatorStorage,
+//     block_trace_storage: &mut BlockTraceAggregatorStorage,
+//     environment: &AggregatorEnvironment,
+// ) {
+//     let mut blocks = get_most_recent_produced_blocks(environment, 10).await;
+
+//     blocks.sort_by(|a, b| a.0.cmp(&b.0));
+//     let mut highest = blocks[0].0;
+//     const MAX_HISTORY: usize = 100;
+
+//     let mut current_height_blocks: Vec<(usize, String, String)> = vec![];
+
+//     while let Some(e) = blocks.get(0) {
+//         if e.0 == highest {
+//             current_height_blocks.push(e.clone());
+//             blocks.remove(0);
+//         } else {
+//             info!("Rehydratating height: {}", highest);
+//             // aggregate here
+//             let node_infos = get_node_info_from_cluster(environment).await;
+
+//             let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
+//                 .iter()
+//                 .map(|(k, v)| {
+//                     (
+//                         v.daemon_status.addrs_and_ports.peer.peer_id.clone(),
+//                         k.to_string(),
+//                     )
+//                 })
+//                 .collect();
+
+//             let tag_to_block_hash_map: BTreeMap<String, String> = current_height_blocks
+//                 .iter()
+//                 .map(|(_, state_hash, tag)| {
+//                     // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
+//                     (tag.to_string(), state_hash.to_string())
+//                 })
+//                 .collect();
+
+//             let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> =
+//                 BTreeMap::new();
+
+//             for (_, state_hash, _) in &current_height_blocks {
+//                 info!("Collecting node traces for block {state_hash}");
+//                 let trace = get_block_trace_from_cluster(environment, state_hash).await;
+//                 info!("Traces collected for block {state_hash}");
+//                 info!("Aggregating trace data and traces for block {state_hash}");
+//                 // println!("TRACES KEYS: {:#?}", trace.keys());
+//                 match aggregate_block_traces(highest, state_hash, &node_infos, trace) {
+//                     Ok(data) => {
+//                         block_traces.insert(state_hash.clone(), data);
+//                     }
+//                     Err(e) => warn!("{}", e),
+//                 }
+//                 info!("Trace aggregation finished for block {state_hash}");
+//             }
+
+//             let _ = block_trace_storage.insert(highest, block_traces);
+
+//             // TODO: move this to a separate thread?
+//             info!("Polling debuggers for height {highest}");
+
+//             match pull_debugger_data_cpnp(Some(highest), environment, &node_infos).await {
+//                 Ok(data) => {
+//                     let (height, aggregated_data) = match aggregate_first_receive(
+//                         data,
+//                         &peer_id_to_tag_map,
+//                         &tag_to_block_hash_map,
+//                     ) {
+//                         Ok((height, aggregate_data)) => (height, aggregate_data),
+//                         Err(e) => {
+//                             warn!("{}", e);
+//                             continue;
+//                         }
+//                     };
+
+//                     // TODO: this is not a very good idea, capture the error!
+//                     let _ = ipc_storage.insert(height, aggregated_data);
+//                 }
+//                 Err(e) => error!("Error in pulling data: {}", e),
+//             }
+//             current_height_blocks.clear();
+//             highest -= 1;
+//         }
+//     }
+//     info!("Rehydratation completed!");
+// }
+
 pub async fn poll_node_traces(
     ipc_storage: &mut IpcAggregatorStorage,
     block_trace_storage: &mut BlockTraceAggregatorStorage,
+    cross_validation_storage: &mut CrossValidationStorage,
     environment: &AggregatorEnvironment,
 ) {
     loop {
@@ -89,9 +180,6 @@ pub async fn poll_node_traces(
             info!("No blocks yet");
             continue;
         }
-
-        // blocks_on_most_recent_height.sort_unstable();
-        // blocks_on_most_recent_height.dedup();
 
         // Catch the case that the block producers have different height for their most recent blocks
         if blocks_on_most_recent_height.len() > 1
@@ -116,12 +204,6 @@ pub async fn poll_node_traces(
         // println!("INF: {:#?}", node_infos);
         info!("Information collected");
 
-        // build a map that maps NodeIp to the node tag
-        // let node_ip_to_tag_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
-        //     (v.daemon_status.addrs_and_ports.external_ip.to_string(), k.to_string())
-        // })
-        // .collect();
-
         // build a map that maps peer_id to tag
         let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
             .iter()
@@ -133,16 +215,6 @@ pub async fn poll_node_traces(
             })
             .collect();
 
-        // let tag_to_peer_id_map: BTreeMap<String, String> = node_infos.iter().map(|(k, v)| {
-        //     (k.to_string(), v.daemon_status.addrs_and_ports.peer.peer_id.clone())
-        // })
-        // .collect();
-
-        // let peer_id_to_state_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height.iter().map(|(_, state_hash, tag)| {
-        //     let peer_id = tag_to_peer_id_map.get(tag).unwrap();
-        //     (peer_id.to_string(), state_hash.to_string())
-        // }).collect();
-
         let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height
             .iter()
             .map(|(_, state_hash, tag)| {
@@ -150,6 +222,10 @@ pub async fn poll_node_traces(
                 (tag.to_string(), state_hash.to_string())
             })
             .collect();
+
+        // Optimization, only grab traces once for the same block hash
+        // blocks_on_most_recent_height.sort_unstable();
+        // blocks_on_most_recent_height.dedup();
 
         for (_, state_hash, _) in blocks_on_most_recent_height {
             info!("Collecting node traces for block {state_hash}");
@@ -166,7 +242,7 @@ pub async fn poll_node_traces(
             info!("Trace aggregation finished for block {state_hash}");
         }
 
-        let _ = block_trace_storage.insert(height, block_traces);
+        let _ = block_trace_storage.insert(height, block_traces.clone());
 
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
@@ -186,7 +262,11 @@ pub async fn poll_node_traces(
                 };
 
                 // TODO: this is not a very good idea, capture the error!
-                let _ = ipc_storage.insert(height, aggregated_data);
+                let _ = ipc_storage.insert(height, aggregated_data.clone());
+
+                // also do the cross_validation
+                let report = cross_validate_ipc_with_traces(block_traces, aggregated_data, height);
+                let _ = cross_validation_storage.insert(height, report);
             }
             Err(e) => error!("Error in pulling data: {}", e),
         }

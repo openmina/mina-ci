@@ -10,7 +10,7 @@ trigger:
   - test
 
 environment:
-  HEIGHTS_TO_CHECK: 10
+  HEIGHTS_TO_CHECK: 30
 
 steps:
 

@@ -1,0 +1,56 @@
+
+kind: pipeline
+name: cross-validation-tests
+type: docker
+
+trigger:
+  event:
+  - push
+  branch:
+  - test
+
+environment:
+  HEIGHTS_TO_CHECK: 10
+
+steps:
+
+- name: build-aggregator
+  image: adrnagy/aggregator-builder:latest
+  commands:
+  - cargo build --release
+
+- name: aggregator-testnet
+  image: adrnagy/aggregator-builder:latest
+  detach: true
+  environment:
+    CLUSTER_BASE_URL: http://1.k8.openmina.com:31308
+    PLAIN_NODE_COUNT: 8
+    SEED_NODE_COUNT: 1
+    PRODUCER_NODE_COUNT: 5
+    TRANSACTION_GENERATOR_NODE_COUNT: 0
+    SNARKER_NODE_COUNT: 8
+  commands:
+  - ./target/release/mina-aggregator
+
+- name: aggregator-testnet-unoptimized
+  image: adrnagy/aggregator-builder:latest
+  detach: true
+  environment:
+    CLUSTER_BASE_URL: http://1.k8.openmina.com:31311
+    PLAIN_NODE_COUNT: 8
+    SEED_NODE_COUNT: 1
+    PRODUCER_NODE_COUNT: 5
+    TRANSACTION_GENERATOR_NODE_COUNT: 0
+    SNARKER_NODE_COUNT: 64
+  commands:
+  - ./target/release/mina-aggregator
+
+- name: ipc-vs-traces-testnet
+  image: adrnagy/aggregator-builder:latest
+  commands:
+  - ./scripts/crossvalidate_n_blocks.sh http://aggregator-testnet:8000 $${HEIGHTS_TO_CHECK}
+
+- name: ipc-vs-traces-testnet-unoptimized
+  image: adrnagy/aggregator-builder:latest
+  commands:
+  - ./scripts/crossvalidate_n_blocks.sh http://aggregator-testnet-unoptimized:8000 $${HEIGHTS_TO_CHECK}

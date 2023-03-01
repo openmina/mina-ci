@@ -14,7 +14,6 @@ pub use producer_traces::*;
 pub mod node_block_traces;
 pub use node_block_traces::*;
 
-const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31308";
 const PLAIN_NODE_COMPONENT: &str = "node";
 const SEED_NODE_COMPONENT: &str = "seed";
 const PRODUCER_NODE_COMPONENT: &str = "prod";
@@ -56,6 +55,8 @@ pub fn collect_all_urls(
 ) -> Nodes {
     let mut res: Nodes = BTreeMap::new();
 
+    let cluster_base_url = environment.cluster_base_url.to_string();
+
     let component = match component_type {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
@@ -63,7 +64,7 @@ pub fn collect_all_urls(
 
     for seed_index in 1..=environment.seed_node_count {
         let seed_label = format!("{}{}", SEED_NODE_COMPONENT, seed_index);
-        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, seed_label, component);
+        let url = format!("{}/{}/{}", cluster_base_url, seed_label, component);
         res.insert(seed_label, url);
     }
 
@@ -74,7 +75,7 @@ pub fn collect_all_urls(
     // snarker nodes
     for snarker_index in 1..=environment.snarker_node_count {
         let snarker_label = format!("{}{}", SNARKER_NODE_COMPONENT, snarker_index);
-        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, snarker_label, component);
+        let url = format!("{}/{}/{}", cluster_base_url, snarker_label, component);
         res.insert(snarker_label, url);
     }
 
@@ -98,25 +99,27 @@ pub fn collect_all_urls(
     // plain nodes
     for plain_node_index in 1..=environment.plain_node_count {
         let plain_node_label = format!("{}{}", PLAIN_NODE_COMPONENT, plain_node_index);
-        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, plain_node_label, component);
+        let url = format!("{}/{}/{}", cluster_base_url, plain_node_label, component);
         res.insert(plain_node_label, url);
     }
 
     res
 }
 
-fn collect_producer_urls(_environment: &AggregatorEnvironment, component: &ComponentType) -> Nodes {
+fn collect_producer_urls(environment: &AggregatorEnvironment, component: &ComponentType) -> Nodes {
     let component = match component {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
     };
+
+    let cluster_base_url = environment.cluster_base_url.to_string();
 
     let mut res = BTreeMap::new();
     // TODO: special case, when the producers with prefix 0 have the same key...
     let producers = ["01", "02", "03", "2", "3"];
     for producer_index in producers {
         let producer_label = format!("{}{}", PRODUCER_NODE_COMPONENT, producer_index);
-        let url = format!("{}/{}/{}", CLUSTER_BASE_URL, producer_label, component);
+        let url = format!("{}/{}/{}", cluster_base_url, producer_label, component);
         res.insert(producer_label, url);
     }
     res

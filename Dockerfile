@@ -1,4 +1,8 @@
-FROM rust:1.66
+FROM rust:1.66 as builder
+
+RUN apt update && apt install -y curl jq
+
+FROM builder
 
 WORKDIR /usr/src/mina-aggregator
 

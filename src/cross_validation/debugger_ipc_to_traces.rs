@@ -75,6 +75,7 @@ pub struct AggregateValidationReport {
     pub height_end: Option<usize>,
     pub total_heights_checked: usize,
     pub total_blocks_checked: usize,
+    pub all_nodes_present: Option<bool>,
 }
 
 // TODO: unwraps
@@ -139,6 +140,12 @@ pub fn aggregate_cross_validations(
 
     let total_blocks_checked = reports.len();
 
+    let all_nodes_present = reports
+        .clone()
+        .into_iter()
+        .map(|v| v.all_nodes_present)
+        .reduce(|acc, current| acc && current);
+
     let min_agg = reports
         .clone()
         .into_iter()
@@ -154,5 +161,6 @@ pub fn aggregate_cross_validations(
         height_start,
         height_end,
         total_blocks_checked,
+        all_nodes_present,
     }
 }

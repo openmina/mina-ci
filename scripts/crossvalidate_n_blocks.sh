@@ -15,4 +15,5 @@ do
     sleep 60
 done
 
-curl -s http://localhost:8000/validate/ipc?count=6 | jq
+
+curl -s $URL/validate/ipc?count=$REQUIRED_HEIGHTS | jq

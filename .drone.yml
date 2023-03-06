@@ -1,6 +1,6 @@
 
 kind: pipeline
-name: build
+name: cross-validation-tests
 type: docker
 
 trigger:
@@ -8,6 +8,9 @@ trigger:
   - push
   branch:
   - test
+
+environment:
+  HEIGHTS_TO_CHECK: 30
 
 steps:
 
@@ -16,56 +19,38 @@ steps:
   commands:
   - cargo build --release
 
----
-
-kind: pipeline
-name: build
-type: docker
-
-trigger:
-  event:
-  - push
-  branch:
-  - test
-
-depends_on:
-  - build
-
-environment:
-  HEIGHTS_TO_CHECK: 10
-
-steps:
-
 - name: aggregator-testnet
   image: adrnagy/aggregator-builder:latest
   detach: true
   environment:
     CLUSTER_BASE_URL: http://1.k8.openmina.com:31308
     PLAIN_NODE_COUNT: 8
+    SEED_NODE_COUNT: 1
     PRODUCER_NODE_COUNT: 5
     TRANSACTION_GENERATOR_NODE_COUNT: 0
     SNARKER_NODE_COUNT: 8
   commands:
   - ./target/release/mina-aggregator
 
-- name: aggregator-testnet-unoptimized
-  image: adrnagy/aggregator-builder:latest
-  detach: true
-  environment:
-    CLUSTER_BASE_URL: http://1.k8.openmina.com:31311
-    PLAIN_NODE_COUNT: 8
-    PRODUCER_NODE_COUNT: 5
-    TRANSACTION_GENERATOR_NODE_COUNT: 0
-    SNARKER_NODE_COUNT: 64
-  commands:
-  - ./target/release/mina-aggregator
+# - name: aggregator-testnet-unoptimized
+#   image: adrnagy/aggregator-builder:latest
+#   detach: true
+#   environment:
+#     CLUSTER_BASE_URL: http://1.k8.openmina.com:31311
+#     PLAIN_NODE_COUNT: 8
+#     SEED_NODE_COUNT: 1
+#     PRODUCER_NODE_COUNT: 5
+#     TRANSACTION_GENERATOR_NODE_COUNT: 0
+#     SNARKER_NODE_COUNT: 64
+#   commands:
+#   - ./target/release/mina-aggregator
 
-- name: cross-validation-ipc-traces-testnet
+- name: ipc-vs-traces-testnet
   image: adrnagy/aggregator-builder:latest
   commands:
   - ./scripts/crossvalidate_n_blocks.sh http://aggregator-testnet:8000 $${HEIGHTS_TO_CHECK}
 
-- name: cross-validation-ipc-traces-testnet-unoptimized
-  image: adrnagy/aggregator-builder:latest
-  commands:
-  - ./scripts/crossvalidate_n_blocks.sh http://aggregator-testnet-unoptimized:8000 $${HEIGHTS_TO_CHECK}
+# - name: ipc-vs-traces-testnet-unoptimized
+#   image: adrnagy/aggregator-builder:latest
+#   commands:
+#   - ./scripts/crossvalidate_n_blocks.sh http://aggregator-testnet-unoptimized:8000 $${HEIGHTS_TO_CHECK}

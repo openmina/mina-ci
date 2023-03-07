@@ -5,6 +5,7 @@ use crate::{
         BlockTraceAggregatorReport, CpnpBlockPublication, CpnpBlockPublicationFlattened,
     },
     cross_validation::{aggregate_cross_validations, AggregateValidationReport, ValidationReport},
+    storage::AggregatorStorage,
     BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage,
 };
 use reqwest::StatusCode;
@@ -17,10 +18,20 @@ pub struct QueryOptions {
 }
 
 pub async fn get_aggregated_block_receive_data(
+    build_number: usize,
     height: usize,
-    ipc_storage: IpcAggregatorStorage,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = ipc_storage.get(height) {
+    let ipc_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.ipc_storage()
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<CpnpBlockPublication>::new()),
+            StatusCode::OK,
+        ));
+    };
+
+    if let Some(data) = ipc_storage.get(&height) {
         let res: Vec<CpnpBlockPublicationFlattened> = data
             .values()
             .cloned()
@@ -40,9 +51,19 @@ pub async fn get_aggregated_block_receive_data(
 }
 
 pub async fn get_aggregated_block_receive_data_latest(
-    ipc_storage: IpcAggregatorStorage,
+    build_number: usize,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = ipc_storage.get_latest_value() {
+    let ipc_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.ipc_storage()
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<CpnpBlockPublication>::new()),
+            StatusCode::OK,
+        ));
+    };
+
+    if let Some((_, data)) = ipc_storage.last_key_value() {
         let res: Vec<CpnpBlockPublicationFlattened> = data
             .values()
             .cloned()
@@ -62,10 +83,20 @@ pub async fn get_aggregated_block_receive_data_latest(
 }
 
 pub async fn get_aggregated_block_trace_data(
+    build_number: usize,
     height: usize,
-    block_trace_storage: BlockTraceAggregatorStorage,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = block_trace_storage.get(height) {
+    let block_trace_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.trace_storage()
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
+            StatusCode::OK,
+        ));
+    };
+
+    if let Some(data) = block_trace_storage.get(&height) {
         let res: Vec<BlockTraceAggregatorReport> =
             data.values().cloned().into_iter().flatten().collect();
         Ok(warp::reply::with_status(
@@ -81,9 +112,19 @@ pub async fn get_aggregated_block_trace_data(
 }
 
 pub async fn get_aggregated_block_trace_data_latest(
-    block_trace_storage: BlockTraceAggregatorStorage,
+    build_number: usize,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = block_trace_storage.get_latest_value() {
+    let block_trace_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.trace_storage()
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
+            StatusCode::OK,
+        ));
+    };
+
+    if let Some((_, data)) = block_trace_storage.last_key_value() {
         let res: Vec<BlockTraceAggregatorReport> =
             data.values().cloned().into_iter().flatten().collect();
         Ok(warp::reply::with_status(
@@ -99,9 +140,19 @@ pub async fn get_aggregated_block_trace_data_latest(
 }
 
 pub async fn get_aggregated_block_trace_data_latest_height(
-    block_trace_storage: BlockTraceAggregatorStorage,
+    build_number: usize,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(Some(data)) = block_trace_storage.get_latest_key() {
+    let block_trace_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.trace_storage()
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
+            StatusCode::OK,
+        ));
+    };
+
+    if let Some((_, data)) = block_trace_storage.last_key_value() {
         Ok(warp::reply::with_status(
             warp::reply::json(&data),
             StatusCode::OK,
@@ -115,10 +166,20 @@ pub async fn get_aggregated_block_trace_data_latest_height(
 }
 
 pub async fn cross_validate_ipc_with_traces_handler(
+    build_number: usize,
     height: usize,
-    cross_validation_storage: CrossValidationStorage,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    let res = if let Ok(Some(data)) = cross_validation_storage.get(height) {
+    let cross_validation_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.cross_validation_storage()
+    } else {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
+            StatusCode::OK,
+        ));
+    };
+
+    let res = if let Some(data) = cross_validation_storage.get(&height) {
         data
     } else {
         return Ok(warp::reply::with_status(
@@ -134,19 +195,27 @@ pub async fn cross_validate_ipc_with_traces_handler(
 }
 
 pub async fn aggregate_cross_validations_handler(
+    build_number: usize,
     options: QueryOptions,
-    cross_validation_storage: CrossValidationStorage,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let count = options.count.unwrap_or(10);
 
-    let n_validations = if let Ok(data) = cross_validation_storage.get_latest_n_values(count) {
-        data
+    let cross_validation_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.cross_validation_storage()
     } else {
         return Ok(warp::reply::with_status(
-            warp::reply::json(&AggregateValidationReport::default()),
+            warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
             StatusCode::OK,
         ));
     };
+
+    let n_validations = cross_validation_storage
+        .values()
+        .cloned()
+        .rev()
+        .take(count)
+        .collect();
 
     let res = aggregate_cross_validations(n_validations);
 
@@ -157,20 +226,21 @@ pub async fn aggregate_cross_validations_handler(
 }
 
 pub async fn get_cross_validations_count_handler(
-    cross_validation_storage: CrossValidationStorage,
-
+    build_number: usize,
+    storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    if let Ok(data) = cross_validation_storage.get_count() {
-        Ok(warp::reply::with_status(
-            warp::reply::json(&data),
-            StatusCode::OK,
-        ))
+    let cross_validation_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
+        read_storage.cross_validation_storage()
     } else {
-        Ok(warp::reply::with_status(
-            warp::reply::json(&0),
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
             StatusCode::OK,
-        ))
-    }
+        ));
+    };
+    Ok(warp::reply::with_status(
+        warp::reply::json(&cross_validation_storage.len()),
+        StatusCode::OK,
+    ))
 }
 
 // fn empty_json<T: Serialize + Default>(res: T) -> impl warp::Reply {

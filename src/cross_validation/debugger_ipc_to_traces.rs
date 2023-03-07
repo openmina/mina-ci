@@ -131,8 +131,12 @@ pub fn aggregate_cross_validations(
     cross_validations: Vec<BTreeMap<String, ValidationReport>>,
 ) -> AggregateValidationReport {
     let total_heights_checked = cross_validations.len();
-    let height_start = cross_validations.first().and_then(|first| first.first_key_value().map(|(_, v)| v.height));
-    let height_end = cross_validations.last().and_then(|first| first.first_key_value().map(|(_, v)| v.height));
+    let height_start = cross_validations
+        .first()
+        .and_then(|first| first.first_key_value().map(|(_, v)| v.height));
+    let height_end = cross_validations
+        .last()
+        .and_then(|first| first.first_key_value().map(|(_, v)| v.height));
     let reports: Vec<ValidationReport> = cross_validations
         .into_iter()
         .flat_map(|v| v.values().cloned().collect::<Vec<_>>())

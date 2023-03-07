@@ -65,9 +65,7 @@ impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
     pub fn get_count(&self) -> Result<usize, AggregatorError> {
         self.inner
             .read()
-            .map(|read_locked_storage| {
-                read_locked_storage.len()
-            })
+            .map(|read_locked_storage| read_locked_storage.len())
             .map_err(|e| AggregatorError::StorageError {
                 reason: e.to_string(),
             })

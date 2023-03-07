@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use cross_validation::ValidationReport;
 use error::AggregatorError;
+use storage::{BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage};
 use tokio::signal;
 use tracing::info;
 
@@ -21,12 +22,6 @@ pub mod storage;
 
 pub type AggregatorResult<T> = Result<T, AggregatorError>;
 
-pub type IpcAggregatorStorage = LockedBTreeMap<usize, BTreeMap<BlockHash, CpnpBlockPublication>>;
-pub type BlockTraceAggregatorStorage =
-    LockedBTreeMap<usize, BTreeMap<BlockHash, Vec<BlockTraceAggregatorReport>>>;
-
-pub type CrossValidationStorage = LockedBTreeMap<usize, BTreeMap<BlockHash, ValidationReport>>;
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -34,31 +29,20 @@ async fn main() {
     let environment = config::set_environment();
 
     info!("Creating debugger pulling thread");
-    let ipc_storage: IpcAggregatorStorage = LockedBTreeMap::new();
-    let block_trace_storage: BlockTraceAggregatorStorage = LockedBTreeMap::new();
-    let cross_validation_storage: CrossValidationStorage = LockedBTreeMap::new();
+    let aggregator_storage = LockedBTreeMap::new();
 
-    let mut t_ipc_storage = ipc_storage.clone();
-    let mut t_block_trace_storage = block_trace_storage.clone();
-    let mut t_cross_validation_storage = cross_validation_storage.clone();
+    // let mut t_ipc_storage = ipc_storage.clone();
+    // let mut t_block_trace_storage = block_trace_storage.clone();
+    // let mut t_cross_validation_storage = cross_validation_storage.clone();
+    let mut t_aggregator_storage = aggregator_storage.clone();
     let t_environment = environment.clone();
-    let handle = tokio::spawn(async move {
-        poll_node_traces(
-            &mut t_ipc_storage,
-            &mut t_block_trace_storage,
-            &mut t_cross_validation_storage,
-            &t_environment,
-        )
-        .await
-    });
+    let handle =
+        tokio::spawn(
+            async move { poll_node_traces(&mut t_aggregator_storage, &t_environment).await },
+        );
 
     info!("Creating rpc server");
-    let rpc_server_handle = rpc::spawn_rpc_server(
-        environment.rpc_port,
-        ipc_storage.clone(),
-        block_trace_storage.clone(),
-        cross_validation_storage.clone(),
-    );
+    let rpc_server_handle = rpc::spawn_rpc_server(environment.rpc_port, aggregator_storage);
 
     let mut signal_stream =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())

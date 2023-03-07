@@ -12,6 +12,7 @@ use crate::{
         collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
         get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
     },
+    storage::AggregatorStorage,
     AggregatorResult, BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage,
 };
 
@@ -163,9 +164,7 @@ async fn get_height_data_cpnp(
 // }
 
 pub async fn poll_node_traces(
-    ipc_storage: &mut IpcAggregatorStorage,
-    block_trace_storage: &mut BlockTraceAggregatorStorage,
-    cross_validation_storage: &mut CrossValidationStorage,
+    storage: &mut AggregatorStorage,
     environment: &AggregatorEnvironment,
 ) {
     loop {
@@ -242,7 +241,7 @@ pub async fn poll_node_traces(
             info!("Trace aggregation finished for block {state_hash}");
         }
 
-        let _ = block_trace_storage.insert(height, block_traces.clone());
+        // let _ = block_trace_storage.insert(height, block_traces.clone());
 
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
@@ -262,11 +261,11 @@ pub async fn poll_node_traces(
                 };
 
                 // TODO: this is not a very good idea, capture the error!
-                let _ = ipc_storage.insert(height, aggregated_data.clone());
+                // let _ = ipc_storage.insert(height, aggregated_data.clone());
 
                 // also do the cross_validation
                 let report = cross_validate_ipc_with_traces(block_traces, aggregated_data, height);
-                let _ = cross_validation_storage.insert(height, report);
+                // let _ = cross_validation_storage.insert(height, report);
             }
             Err(e) => error!("Error in pulling data: {}", e),
         }

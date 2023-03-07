@@ -61,8 +61,8 @@ pub fn set_environment() -> AggregatorEnvironment {
         .parse::<u16>()
         .expect("RPC_PORT should be a valid port number");
 
-    let cluster_base_url = env::var("CLUSTER_BASE_URL")
-        .unwrap_or_else(|_| CLUSTER_BASE_URL.to_string());
+    let cluster_base_url =
+        env::var("CLUSTER_BASE_URL").unwrap_or_else(|_| CLUSTER_BASE_URL.to_string());
 
     AggregatorEnvironment {
         plain_node_count,

@@ -115,10 +115,10 @@ pub fn cross_validate_ipc_with_traces(
             // report.measured_latency_comparison.insert(trace.node.clone(), latency_difference);
 
             let receive_time_difference =
-                trace.date_time.unwrap() - ((ipc_latencies.receive_time as f64) / 1_000_000.0);
+                trace.date_time.map(|trace_time| trace_time - ((ipc_latencies.receive_time as f64) / 1_000_000.0));
             report
                 .received_time_comparison
-                .insert(trace.node.clone(), receive_time_difference);
+                .insert(trace.node.clone(), receive_time_difference.unwrap_or_default());
         }
 
         by_block.insert(block_hash.clone(), report);

@@ -4,9 +4,8 @@ use crate::{
     aggregators::{
         BlockTraceAggregatorReport, CpnpBlockPublication, CpnpBlockPublicationFlattened,
     },
-    cross_validation::{aggregate_cross_validations, AggregateValidationReport, ValidationReport},
+    cross_validation::{aggregate_cross_validations, ValidationReport},
     storage::AggregatorStorage,
-    BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage,
 };
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -23,7 +22,7 @@ pub async fn get_aggregated_block_receive_data(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let ipc_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.ipc_storage()
+        read_storage.ipc_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<CpnpBlockPublication>::new()),
@@ -55,7 +54,7 @@ pub async fn get_aggregated_block_receive_data_latest(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let ipc_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.ipc_storage()
+        read_storage.ipc_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<CpnpBlockPublication>::new()),
@@ -88,7 +87,7 @@ pub async fn get_aggregated_block_trace_data(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let block_trace_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.trace_storage()
+        read_storage.trace_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
@@ -116,7 +115,7 @@ pub async fn get_aggregated_block_trace_data_latest(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let block_trace_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.trace_storage()
+        read_storage.trace_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
@@ -144,7 +143,7 @@ pub async fn get_aggregated_block_trace_data_latest_height(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let block_trace_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.trace_storage()
+        read_storage.trace_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<BlockTraceAggregatorReport>::new()),
@@ -171,7 +170,7 @@ pub async fn cross_validate_ipc_with_traces_handler(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let cross_validation_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.cross_validation_storage()
+        read_storage.cross_validation_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
@@ -202,7 +201,7 @@ pub async fn aggregate_cross_validations_handler(
     let count = options.count.unwrap_or(10);
 
     let cross_validation_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.cross_validation_storage()
+        read_storage.cross_validation_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),
@@ -230,7 +229,7 @@ pub async fn get_cross_validations_count_handler(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     let cross_validation_storage = if let Ok(Some(read_storage)) = storage.get(build_number) {
-        read_storage.cross_validation_storage()
+        read_storage.cross_validation_storage
     } else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&BTreeMap::<String, ValidationReport>::new()),

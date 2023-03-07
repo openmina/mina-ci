@@ -1,8 +1,7 @@
 use warp::Filter;
 
 use crate::{
-    storage::AggregatorStorage, BlockTraceAggregatorStorage, CrossValidationStorage,
-    IpcAggregatorStorage,
+    storage::AggregatorStorage
 };
 
 use super::handlers::{

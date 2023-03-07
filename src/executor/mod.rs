@@ -12,8 +12,8 @@ use crate::{
         collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
         get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
     },
-    storage::AggregatorStorage,
-    AggregatorResult, BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage,
+    storage::{AggregatorStorage, BuildStorage},
+    AggregatorResult,
 };
 
 #[instrument]
@@ -171,6 +171,12 @@ pub async fn poll_node_traces(
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
 
+        let mut build_storage = if let Ok(Some(build_storage)) = storage.get(1) {
+            build_storage
+        } else {
+            BuildStorage::default()
+        };
+
         info!("Collecting produced blocks...");
         let mut blocks_on_most_recent_height = get_most_recent_produced_blocks(environment).await;
         info!("Produced blocks collected");
@@ -241,8 +247,6 @@ pub async fn poll_node_traces(
             info!("Trace aggregation finished for block {state_hash}");
         }
 
-        // let _ = block_trace_storage.insert(height, block_traces.clone());
-
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
 
@@ -261,11 +265,16 @@ pub async fn poll_node_traces(
                 };
 
                 // TODO: this is not a very good idea, capture the error!
-                // let _ = ipc_storage.insert(height, aggregated_data.clone());
 
                 // also do the cross_validation
-                let report = cross_validate_ipc_with_traces(block_traces, aggregated_data, height);
-                // let _ = cross_validation_storage.insert(height, report);
+                let report = cross_validate_ipc_with_traces(block_traces.clone(), aggregated_data.clone(), height);
+                // TODO!
+
+                let _ = build_storage.trace_storage.insert(height, block_traces.clone());
+                let _ = build_storage.ipc_storage.insert(height, aggregated_data.clone());
+                let _ = build_storage.cross_validation_storage.insert(height, report);
+
+                let _ = storage.insert(1, build_storage);
             }
             Err(e) => error!("Error in pulling data: {}", e),
         }

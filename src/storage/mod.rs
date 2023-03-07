@@ -20,9 +20,9 @@ pub type AggregatorStorage = LockedBTreeMap<BuildNumber, BuildStorage>;
 
 #[derive(Debug, Clone)]
 pub struct BuildStorage {
-    ipc_storage: IpcAggregatorStorage,
-    trace_storage: BlockTraceAggregatorStorage,
-    cross_validation_storage: CrossValidationStorage,
+    pub ipc_storage: IpcAggregatorStorage,
+    pub trace_storage: BlockTraceAggregatorStorage,
+    pub cross_validation_storage: CrossValidationStorage,
 }
 
 impl BuildStorage {
@@ -34,17 +34,17 @@ impl BuildStorage {
         }
     }
 
-    pub fn ipc_storage(&self) -> IpcAggregatorStorage {
-        self.ipc_storage.clone()
-    }
+    // pub fn ipc_storage(&self) -> IpcAggregatorStorage {
+    //     self.ipc_storage.clone()
+    // }
 
-    pub fn trace_storage(&self) -> BlockTraceAggregatorStorage {
-        self.trace_storage.clone()
-    }
+    // pub fn trace_storage(&self) -> BlockTraceAggregatorStorage {
+    //     self.trace_storage.clone()
+    // }
 
-    pub fn cross_validation_storage(&self) -> CrossValidationStorage {
-        self.cross_validation_storage.clone()
-    }
+    // pub fn cross_validation_storage(&self) -> CrossValidationStorage {
+    //     self.cross_validation_storage.clone()
+    // }
 }
 
 impl Default for BuildStorage {

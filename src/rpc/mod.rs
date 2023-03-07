@@ -4,8 +4,7 @@ pub mod handlers;
 use tokio::task::JoinHandle;
 
 use crate::{
-    storage::AggregatorStorage, BlockTraceAggregatorStorage, CrossValidationStorage,
-    IpcAggregatorStorage,
+    storage::AggregatorStorage
 };
 
 pub fn spawn_rpc_server(rpc_port: u16, storage: AggregatorStorage) -> JoinHandle<()> {

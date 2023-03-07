@@ -1,12 +1,7 @@
-use std::collections::BTreeMap;
 
-use cross_validation::ValidationReport;
 use error::AggregatorError;
-use storage::{BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage};
 use tokio::signal;
 use tracing::info;
-
-use aggregators::{BlockHash, BlockTraceAggregatorReport, CpnpBlockPublication};
 
 use crate::{executor::poll_node_traces, storage::LockedBTreeMap};
 

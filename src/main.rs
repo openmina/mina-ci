@@ -1,9 +1,14 @@
-
 use error::AggregatorError;
 use tokio::signal;
 use tracing::info;
 
-use crate::{executor::poll_node_traces, storage::LockedBTreeMap};
+use crate::{
+    executor::{
+        poll_node_traces,
+        state::{poll_drone, AggregatorState},
+    },
+    storage::LockedBTreeMap,
+};
 
 pub mod aggregators;
 pub mod config;
@@ -26,15 +31,20 @@ async fn main() {
     info!("Creating debugger pulling thread");
     let aggregator_storage = LockedBTreeMap::new();
 
-    // let mut t_ipc_storage = ipc_storage.clone();
-    // let mut t_block_trace_storage = block_trace_storage.clone();
-    // let mut t_cross_validation_storage = cross_validation_storage.clone();
+    let state = AggregatorState::default();
+
+    let mut t_aggregator_storage = aggregator_storage.clone();
+    let t_state = state.clone();
+    let t_environment = environment.clone();
+    let drone_handle = tokio::spawn(async move {
+        poll_drone(&t_state, &t_environment, &mut t_aggregator_storage).await
+    });
+
     let mut t_aggregator_storage = aggregator_storage.clone();
     let t_environment = environment.clone();
-    let handle =
-        tokio::spawn(
-            async move { poll_node_traces(&mut t_aggregator_storage, &t_environment).await },
-        );
+    let aggregator_handle = tokio::spawn(async move {
+        poll_node_traces(&state, &mut t_aggregator_storage, &t_environment).await
+    });
 
     info!("Creating rpc server");
     let rpc_server_handle = rpc::spawn_rpc_server(environment.rpc_port, aggregator_storage);
@@ -53,6 +63,7 @@ async fn main() {
         }
     }
 
-    drop(handle);
+    drop(drone_handle);
+    drop(aggregator_handle);
     drop(rpc_server_handle);
 }

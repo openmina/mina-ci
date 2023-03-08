@@ -92,7 +92,7 @@ pub fn cross_validate_ipc_with_traces(
             ..Default::default()
         };
 
-        let ipc_report = ipc_reports.get(block_hash).unwrap();
+        let ipc_report = ipc_reports.get(block_hash).cloned().unwrap_or_default();
         let ipc_node_latencies = ipc_report.node_latencies.clone();
 
         report.all_nodes_present = block_traces.len() == ipc_node_latencies.len();
@@ -114,11 +114,13 @@ pub fn cross_validate_ipc_with_traces(
             // let latency_difference = trace.receive_latency.unwrap() - ipc_latencies.latency_since_block_publication_seconds;
             // report.measured_latency_comparison.insert(trace.node.clone(), latency_difference);
 
-            let receive_time_difference =
-                trace.date_time.map(|trace_time| trace_time - ((ipc_latencies.receive_time as f64) / 1_000_000.0));
-            report
-                .received_time_comparison
-                .insert(trace.node.clone(), receive_time_difference.unwrap_or_default());
+            let receive_time_difference = trace
+                .date_time
+                .map(|trace_time| trace_time - ((ipc_latencies.receive_time as f64) / 1_000_000.0));
+            report.received_time_comparison.insert(
+                trace.node.clone(),
+                receive_time_difference.unwrap_or_default(),
+            );
         }
 
         by_block.insert(block_hash.clone(), report);

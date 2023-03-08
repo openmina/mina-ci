@@ -1,15 +1,13 @@
 use warp::Filter;
 
-use crate::{
-    storage::AggregatorStorage
-};
+use crate::storage::AggregatorStorage;
 
 use super::handlers::{
     aggregate_cross_validations_handler, cross_validate_ipc_with_traces_handler,
     get_aggregated_block_receive_data, get_aggregated_block_receive_data_latest,
     get_aggregated_block_trace_data, get_aggregated_block_trace_data_latest,
-    get_aggregated_block_trace_data_latest_height, get_cross_validations_count_handler,
-    QueryOptions,
+    get_aggregated_block_trace_data_latest_height, get_build_summaries,
+    get_cross_validations_count_handler, QueryOptions,
 };
 
 pub fn filters(
@@ -28,14 +26,24 @@ pub fn filters(
         .or(block_traces_aggregation_latest_height(storage.clone()))
         .or(cross_validate_ipc_with_traces(storage.clone()))
         .or(cross_validation_counts(storage.clone()))
-        .or(aggregate_cross_validations_filter(storage))
+        .or(aggregate_cross_validations_filter(storage.clone()))
+        .or(build_summaries(storage))
         .with(cors)
+}
+
+fn build_summaries(
+    storage: AggregatorStorage,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("builds")
+        .and(warp::get())
+        .and(with_storage(storage))
+        .and_then(get_build_summaries)
 }
 
 fn block_receive_aggregation(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "blocks" / usize)
+    warp::path!("builds" / usize / "blocks" / usize)
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_aggregated_block_receive_data)
@@ -44,7 +52,7 @@ fn block_receive_aggregation(
 fn block_receive_aggregation_latest(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "blocks" / "latest")
+    warp::path!("builds" / usize / "blocks" / "latest")
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_aggregated_block_receive_data_latest)
@@ -53,7 +61,7 @@ fn block_receive_aggregation_latest(
 fn block_traces_aggregation_latest(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "traces" / "latest")
+    warp::path!("builds" / usize / "traces" / "latest")
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_aggregated_block_trace_data_latest)
@@ -62,7 +70,7 @@ fn block_traces_aggregation_latest(
 fn block_traces_aggregation_latest_height(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "traces" / "latest" / "height")
+    warp::path!("builds" / usize / "traces" / "latest" / "height")
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_aggregated_block_trace_data_latest_height)
@@ -71,7 +79,7 @@ fn block_traces_aggregation_latest_height(
 fn block_traces_aggregation(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "traces" / usize)
+    warp::path!("builds" / usize / "traces" / usize)
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_aggregated_block_trace_data)
@@ -80,7 +88,7 @@ fn block_traces_aggregation(
 fn cross_validate_ipc_with_traces(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "validate" / "ipc" / usize)
+    warp::path!("builds" / usize / "validate" / "ipc" / usize)
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(cross_validate_ipc_with_traces_handler)
@@ -89,7 +97,7 @@ fn cross_validate_ipc_with_traces(
 fn aggregate_cross_validations_filter(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "validate" / "ipc")
+    warp::path!("builds" / usize / "validate" / "ipc")
         .and(warp::get())
         .and(warp::query::<QueryOptions>())
         .and(with_storage(storage))
@@ -99,7 +107,7 @@ fn aggregate_cross_validations_filter(
 fn cross_validation_counts(
     storage: AggregatorStorage,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("build" / usize / "validate" / "ipc" / "count")
+    warp::path!("builds" / usize / "validate" / "ipc" / "count")
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_cross_validations_count_handler)

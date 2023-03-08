@@ -84,6 +84,15 @@ impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
                 reason: e.to_string(),
             })
     }
+
+    pub fn get_values(&self) -> Result<Vec<V>, AggregatorError> {
+        self.inner
+            .read()
+            .map(|read_locked_storage| read_locked_storage.values().cloned().collect())
+            .map_err(|e| AggregatorError::StorageError {
+                reason: e.to_string(),
+            })
+    }
 }
 
 impl<K: Ord + Clone, V: Clone> Default for LockedBTreeMap<K, V> {

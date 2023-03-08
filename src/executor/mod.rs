@@ -16,6 +16,10 @@ use crate::{
     AggregatorResult,
 };
 
+use self::state::AggregatorState;
+
+pub mod state;
+
 #[instrument]
 async fn pull_debugger_data_cpnp(
     height: Option<usize>,
@@ -164,6 +168,7 @@ async fn get_height_data_cpnp(
 // }
 
 pub async fn poll_node_traces(
+    state: &AggregatorState,
     storage: &mut AggregatorStorage,
     environment: &AggregatorEnvironment,
 ) {
@@ -171,10 +176,18 @@ pub async fn poll_node_traces(
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
 
-        let mut build_storage = if let Ok(Some(build_storage)) = storage.get(1) {
+        let build_number = if let Ok(read_state) = state.read() {
+            read_state.build_number
+        } else {
+            info!("No CI build yet!");
+            continue;
+        };
+
+        let mut build_storage = if let Ok(Some(build_storage)) = storage.get(build_number) {
             build_storage
         } else {
-            BuildStorage::default()
+            info!("NO BUILD STORAGE?");
+            continue;
         };
 
         info!("Collecting produced blocks...");
@@ -267,16 +280,60 @@ pub async fn poll_node_traces(
                 // TODO: this is not a very good idea, capture the error!
 
                 // also do the cross_validation
-                let report = cross_validate_ipc_with_traces(block_traces.clone(), aggregated_data.clone(), height);
+                let report = cross_validate_ipc_with_traces(
+                    block_traces.clone(),
+                    aggregated_data.clone(),
+                    height,
+                );
                 // TODO!
 
-                let _ = build_storage.trace_storage.insert(height, block_traces.clone());
-                let _ = build_storage.ipc_storage.insert(height, aggregated_data.clone());
-                let _ = build_storage.cross_validation_storage.insert(height, report);
-
-                let _ = storage.insert(1, build_storage);
+                let _ = build_storage
+                    .trace_storage
+                    .insert(height, block_traces.clone());
+                let _ = build_storage
+                    .ipc_storage
+                    .insert(height, aggregated_data.clone());
+                let _ = build_storage
+                    .cross_validation_storage
+                    .insert(height, report);
             }
             Err(e) => error!("Error in pulling data: {}", e),
         }
+
+        // TODO: move this around
+        let application_min = block_traces
+            .values()
+            .map(|traces| {
+                traces
+                    .iter()
+                    .map(|val| val.block_application.unwrap_or(f64::MAX))
+                    .reduce(|a, b| a.min(b))
+                    .unwrap_or(f64::MAX)
+            })
+            .reduce(|a, b| a.min(b))
+            .unwrap_or(f64::MAX);
+
+        let application_max = block_traces
+            .values()
+            .map(|traces| {
+                traces
+                    .iter()
+                    .map(|val| val.block_application.unwrap_or(f64::MIN))
+                    .reduce(|a, b| a.min(b))
+                    .unwrap_or(f64::MIN)
+            })
+            .reduce(|a, b| a.max(b))
+            .unwrap_or(f64::MIN);
+
+        if build_storage.build_summary.block_application_min == 0.0 {
+            build_storage.build_summary.block_application_min = application_min;
+        } else {
+            build_storage.build_summary.block_application_min =
+                application_min.min(build_storage.build_summary.block_application_min);
+        }
+        build_storage.build_summary.block_application_max =
+            application_max.max(build_storage.build_summary.block_application_max);
+
+        let _ = storage.insert(build_number, build_storage);
     }
 }

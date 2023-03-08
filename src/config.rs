@@ -5,6 +5,7 @@ const LIBP2P_IPC_URL_COMPONENT_DEFAULT: &str = "libp2p_ipc/block";
 const RPC_PORT_DEFAULT: u16 = 8000;
 pub const CLUSTER_NODE_LIST_URL: &str = "http://1.k8.openmina.com:31311/nodes";
 const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31308";
+const CI_API_URL: &str = "https://ci.openmina.com/api";
 
 const DATA_PULL_INTERVAL_DEFAULT: u64 = 10;
 
@@ -19,6 +20,7 @@ pub struct AggregatorEnvironment {
     pub data_pull_interval: Duration,
     pub rpc_port: u16,
     pub cluster_base_url: String,
+    pub ci_api_url: String,
 }
 
 pub fn set_environment() -> AggregatorEnvironment {
@@ -64,6 +66,8 @@ pub fn set_environment() -> AggregatorEnvironment {
     let cluster_base_url =
         env::var("CLUSTER_BASE_URL").unwrap_or_else(|_| CLUSTER_BASE_URL.to_string());
 
+    let ci_api_url = env::var("CI_API_URL").unwrap_or_else(|_| CI_API_URL.to_string());
+
     AggregatorEnvironment {
         plain_node_count,
         seed_node_count,
@@ -74,5 +78,6 @@ pub fn set_environment() -> AggregatorEnvironment {
         data_pull_interval,
         rpc_port,
         cluster_base_url,
+        ci_api_url,
     }
 }

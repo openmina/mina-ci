@@ -124,7 +124,7 @@ impl BuildSummaryHelpers {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct BuildInfo {
-    #[serde()]
+    #[serde(skip_serializing)]
     pub id: usize,
     pub number: usize,
     #[serde(rename(serialize = "commit"))]

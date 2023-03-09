@@ -158,13 +158,13 @@ pub fn aggregate_first_receive(
     let height = if !publish_messages.is_empty() {
         publish_messages[0].events[0].msg.height
     } else {
-        println!("Error: Height");
+        // println!("Error: Height");
         return Err(AggregatorError::SourceNotReady);
     };
 
     let mut message_hash_to_block_hash_map: BTreeMap<String, String> = BTreeMap::new();
 
-    println!("TAG TO BLOCK HASH: {:#?}", tag_to_block_hash_map);
+    // println!("TAG TO BLOCK HASH: {:#?}", tag_to_block_hash_map);
 
     for publish_message in publish_messages {
         // let block_hash = publish_message.events[0].hash.clone();

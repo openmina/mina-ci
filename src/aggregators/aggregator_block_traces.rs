@@ -49,13 +49,13 @@ pub fn aggregate_block_traces(
             .total_cmp(&(b_trace.sections[0].checkpoints[0].started_at + b_trace.total_time))
     });
 
-    println!(
-        "IT: {:#?}",
-        internal_receivers
-            .iter()
-            .map(|v| v.1.sections[0].checkpoints[0].started_at)
-            .collect::<Vec<_>>()
-    );
+    // println!(
+    //     "IT: {:#?}",
+    //     internal_receivers
+    //         .iter()
+    //         .map(|v| v.1.sections[0].checkpoints[0].started_at)
+    //         .collect::<Vec<_>>()
+    // );
 
     // println!("IT: {:#?}", internal_receivers);
     let producer_nodes: Vec<String> = internal_receivers

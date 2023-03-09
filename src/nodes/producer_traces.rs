@@ -124,7 +124,7 @@ pub async fn get_most_recent_produced_blocks(
         .await;
 
     info!("Collected {} produced blocks", collected.len());
-    println!("Blocks: {:#?}", collected);
+    // println!("Blocks: {:#?}", collected);
 
     collected
 }

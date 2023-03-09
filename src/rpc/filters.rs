@@ -6,7 +6,7 @@ use super::handlers::{
     aggregate_cross_validations_handler, cross_validate_ipc_with_traces_handler,
     get_aggregated_block_receive_data, get_aggregated_block_receive_data_latest,
     get_aggregated_block_trace_data, get_aggregated_block_trace_data_latest,
-    get_aggregated_block_trace_data_latest_height, get_build_summaries,
+    get_aggregated_block_trace_data_latest_height, get_build_summaries, get_build_summary,
     get_cross_validations_count_handler, QueryOptions,
 };
 
@@ -27,7 +27,8 @@ pub fn filters(
         .or(cross_validate_ipc_with_traces(storage.clone()))
         .or(cross_validation_counts(storage.clone()))
         .or(aggregate_cross_validations_filter(storage.clone()))
-        .or(build_summaries(storage))
+        .or(build_summaries(storage.clone()))
+        .or(build_summary(storage))
         .with(cors)
 }
 
@@ -38,6 +39,15 @@ fn build_summaries(
         .and(warp::get())
         .and(with_storage(storage))
         .and_then(get_build_summaries)
+}
+
+fn build_summary(
+    storage: AggregatorStorage,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("builds" / usize)
+        .and(warp::get())
+        .and(with_storage(storage))
+        .and_then(get_build_summary)
 }
 
 fn block_receive_aggregation(

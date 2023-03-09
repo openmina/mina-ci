@@ -19,6 +19,8 @@ pub type BuildNumber = usize;
 
 pub type AggregatorStorage = LockedBTreeMap<BuildNumber, BuildStorage>;
 
+pub type BlockHeight = usize;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct BuildStorage {
     #[serde(skip)]
@@ -43,13 +45,67 @@ pub struct BuildSummary {
     pub block_application_min: f64,
     pub block_application_avg: f64,
     pub block_application_max: f64,
-    pub latency_min: f64,
-    pub latency_avg: f64,
-    pub latency_max: f64,
+    pub receive_latency_min: f64,
+    pub receive_latency_avg: f64,
+    pub receive_latency_max: f64,
+    pub application_times: Vec<f64>,
+    pub production_times: Vec<f64>,
+    pub receive_latencies: Vec<f64>,
+    #[serde(skip)]
+    pub helpers: BuildSummaryHelpers,
+    // #[serde(skip)]
+    // pub avg_total_count: usize,
+    // #[serde(skip)]
+    // pub avg_total: f64,
     // pub block_production: Statistics,
     // pub block_application: Statistics,
     // pub latency: Statistics,
     // pub latency
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct BuildSummaryHelpers {
+    /// Total occurences, to calculate the avg
+    pub application_avg_total_count: BTreeMap<BlockHeight, usize>,
+    /// Total, to calculate average online
+    pub application_total: BTreeMap<BlockHeight, f64>,
+    /// Total occurences, to calculate the avg
+    pub production_avg_total_count: BTreeMap<BlockHeight, usize>,
+    /// Total, to calculate average online
+    pub production_total: BTreeMap<BlockHeight, f64>,
+    /// Total occurences, to calculate the avg
+    pub receive_latencies_avg_total_count: BTreeMap<BlockHeight, usize>,
+    /// Total, to calculate average online
+    pub receive_latencies_total: BTreeMap<BlockHeight, f64>,
+
+    // times for histograms
+    pub application_times: BTreeMap<BlockHeight, Vec<f64>>,
+    pub production_times: BTreeMap<BlockHeight, Vec<f64>>,
+    pub block_count_per_height: BTreeMap<BlockHeight, usize>,
+    pub receive_latencies: BTreeMap<BlockHeight, Vec<f64>>,
+}
+
+impl BuildSummaryHelpers {
+    pub fn get_application_average(&self) -> f64 {
+        let count: usize = self.application_avg_total_count.values().sum();
+        let total: f64 = self.application_total.values().sum();
+
+        total / (count as f64)
+    }
+
+    pub fn get_production_average(&self) -> f64 {
+        let count: usize = self.production_avg_total_count.values().sum();
+        let total: f64 = self.production_total.values().sum();
+
+        total / (count as f64)
+    }
+
+    pub fn get_latencies_average(&self) -> f64 {
+        let count: usize = self.receive_latencies_avg_total_count.values().sum();
+        let total: f64 = self.receive_latencies_total.values().sum();
+
+        total / (count as f64)
+    }
 }
 
 // #[derive(Debug, Default, Clone, Serialize)]

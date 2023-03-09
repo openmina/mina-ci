@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use itertools::Itertools;
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
@@ -12,7 +13,7 @@ use crate::{
         collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
         get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
     },
-    storage::{AggregatorStorage, BuildStorage},
+    storage::AggregatorStorage,
     AggregatorResult,
 };
 
@@ -245,7 +246,7 @@ pub async fn poll_node_traces(
         // blocks_on_most_recent_height.sort_unstable();
         // blocks_on_most_recent_height.dedup();
 
-        for (_, state_hash, _) in blocks_on_most_recent_height {
+        for (_, state_hash, _) in blocks_on_most_recent_height.clone() {
             info!("Collecting node traces for block {state_hash}");
             let trace = get_block_trace_from_cluster(environment, &state_hash).await;
             info!("Traces collected for block {state_hash}");
@@ -277,8 +278,6 @@ pub async fn poll_node_traces(
                     }
                 };
 
-                // TODO: this is not a very good idea, capture the error!
-
                 // also do the cross_validation
                 let report = cross_validate_ipc_with_traces(
                     block_traces.clone(),
@@ -300,30 +299,150 @@ pub async fn poll_node_traces(
             Err(e) => error!("Error in pulling data: {}", e),
         }
 
-        // TODO: move this around
-        let application_min = block_traces
+        let application_times: Vec<f64> = block_traces
             .values()
-            .map(|traces| {
+            .flat_map(|traces| {
                 traces
                     .iter()
-                    .map(|val| val.block_application.unwrap_or(f64::MAX))
-                    .reduce(|a, b| a.min(b))
-                    .unwrap_or(f64::MAX)
+                    .filter(|val| !val.is_producer)
+                    .filter_map(|val| val.block_application)
+                    .collect::<Vec<f64>>()
             })
+            .collect();
+
+        let production_times: Vec<f64> = block_traces
+            .values()
+            .flat_map(|traces| {
+                traces
+                    .iter()
+                    .filter(|val| val.is_producer)
+                    .filter_map(|val| val.block_application)
+                    .collect::<Vec<f64>>()
+            })
+            .collect();
+
+        let receive_latencies: Vec<f64> = block_traces
+            .values()
+            .flat_map(|traces| {
+                traces
+                    .iter()
+                    .filter(|val| !val.is_producer)
+                    .filter_map(|val| val.receive_latency)
+                    .collect::<Vec<f64>>()
+            })
+            .collect();
+
+        let application_time_sum: f64 = application_times.iter().sum();
+        let application_min = application_times
+            .iter()
+            .copied()
             .reduce(|a, b| a.min(b))
             .unwrap_or(f64::MAX);
-
-        let application_max = block_traces
-            .values()
-            .map(|traces| {
-                traces
-                    .iter()
-                    .map(|val| val.block_application.unwrap_or(f64::MIN))
-                    .reduce(|a, b| a.min(b))
-                    .unwrap_or(f64::MIN)
-            })
+        let application_max = application_times
+            .iter()
+            .copied()
             .reduce(|a, b| a.max(b))
             .unwrap_or(f64::MIN);
+
+        let production_time_sum: f64 = production_times.iter().sum();
+        let production_min = production_times
+            .iter()
+            .copied()
+            .reduce(|a, b| a.min(b))
+            .unwrap_or(f64::MAX);
+        let production_max = production_times
+            .iter()
+            .copied()
+            .reduce(|a, b| a.max(b))
+            .unwrap_or(f64::MIN);
+
+        let receive_latencies_sum: f64 = receive_latencies.iter().sum();
+        let receive_latencies_min = receive_latencies
+            .iter()
+            .copied()
+            .reduce(|a, b| a.min(b))
+            .unwrap_or(f64::MAX);
+        let receive_latencies_max = receive_latencies
+            .iter()
+            .copied()
+            .reduce(|a, b| a.max(b))
+            .unwrap_or(f64::MIN);
+
+        let unique_block_count = blocks_on_most_recent_height
+            .iter()
+            .map(|(_, hash, _)| hash)
+            .unique()
+            .count();
+        let application_measurement_count: usize = block_traces
+            .values()
+            .map(|traces| traces.iter().filter(|t| !t.is_producer).count())
+            .sum();
+        let production_measurement_count: usize = block_traces
+            .values()
+            .map(|traces| traces.iter().filter(|t| t.is_producer).count())
+            .sum();
+
+        build_storage
+            .build_summary
+            .helpers
+            .application_times
+            .insert(height, application_times);
+        build_storage
+            .build_summary
+            .helpers
+            .production_times
+            .insert(height, production_times);
+        build_storage
+            .build_summary
+            .helpers
+            .receive_latencies
+            .insert(height, receive_latencies);
+
+        build_storage
+            .build_summary
+            .helpers
+            .application_avg_total_count
+            .insert(height, application_measurement_count);
+        build_storage
+            .build_summary
+            .helpers
+            .application_total
+            .insert(height, application_time_sum);
+        build_storage
+            .build_summary
+            .helpers
+            .production_avg_total_count
+            .insert(height, production_measurement_count);
+        build_storage
+            .build_summary
+            .helpers
+            .production_total
+            .insert(height, production_time_sum);
+        // the count is same as the application ones (optimization: remove this helper map and use the application map?)
+        build_storage
+            .build_summary
+            .helpers
+            .receive_latencies_avg_total_count
+            .insert(height, application_measurement_count);
+        build_storage
+            .build_summary
+            .helpers
+            .receive_latencies_total
+            .insert(height, receive_latencies_sum);
+
+        build_storage
+            .build_summary
+            .helpers
+            .block_count_per_height
+            .insert(height, unique_block_count);
+        build_storage.build_summary.block_count = build_storage
+            .build_summary
+            .helpers
+            .block_count_per_height
+            .values()
+            .sum();
+        build_storage.build_summary.cannonical_block_count =
+            build_storage.build_summary.helpers.application_total.len();
 
         if build_storage.build_summary.block_application_min == 0.0 {
             build_storage.build_summary.block_application_min = application_min;
@@ -333,6 +452,32 @@ pub async fn poll_node_traces(
         }
         build_storage.build_summary.block_application_max =
             application_max.max(build_storage.build_summary.block_application_max);
+        build_storage.build_summary.block_application_avg = build_storage
+            .build_summary
+            .helpers
+            .get_application_average();
+
+        if build_storage.build_summary.block_production_min == 0.0 {
+            build_storage.build_summary.block_production_min = production_min;
+        } else {
+            build_storage.build_summary.block_production_min =
+                production_min.min(build_storage.build_summary.block_production_min);
+        }
+        build_storage.build_summary.block_production_max =
+            production_max.max(build_storage.build_summary.block_production_max);
+        build_storage.build_summary.block_production_avg =
+            build_storage.build_summary.helpers.get_production_average();
+
+        if build_storage.build_summary.receive_latency_min == 0.0 {
+            build_storage.build_summary.receive_latency_min = receive_latencies_min;
+        } else {
+            build_storage.build_summary.receive_latency_min =
+                production_min.min(build_storage.build_summary.receive_latency_min);
+        }
+        build_storage.build_summary.receive_latency_max =
+            receive_latencies_max.max(build_storage.build_summary.receive_latency_max);
+        build_storage.build_summary.receive_latency_avg =
+            build_storage.build_summary.helpers.get_latencies_average();
 
         let _ = storage.insert(build_number, build_storage);
     }

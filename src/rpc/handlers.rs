@@ -246,10 +246,84 @@ pub async fn get_build_summaries(
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
     match storage.get_values() {
-        Ok(values) => Ok(warp::reply::with_status(
-            warp::reply::json(&values),
+        Ok(values) => {
+            let res: Vec<BuildStorage> = values
+                .into_iter()
+                .map(|mut build| {
+                    build.build_summary.application_times = build
+                        .build_summary
+                        .helpers
+                        .application_times
+                        .values()
+                        .flatten()
+                        .cloned()
+                        .collect();
+                    build.build_summary.production_times = build
+                        .build_summary
+                        .helpers
+                        .production_times
+                        .values()
+                        .flatten()
+                        .cloned()
+                        .collect();
+                    build.build_summary.receive_latencies = build
+                        .build_summary
+                        .helpers
+                        .receive_latencies
+                        .values()
+                        .flatten()
+                        .cloned()
+                        .collect();
+                    build
+                })
+                .collect();
+            Ok(warp::reply::with_status(
+                warp::reply::json(&res),
+                StatusCode::OK,
+            ))
+        }
+        _ => Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BuildStorage>::new()),
             StatusCode::OK,
         )),
+    }
+}
+
+pub async fn get_build_summary(
+    build_num: usize,
+    storage: AggregatorStorage,
+) -> Result<impl warp::Reply, warp::reject::Rejection> {
+    match storage.get(build_num) {
+        Ok(Some(mut build)) => {
+            build.build_summary.application_times = build
+                .build_summary
+                .helpers
+                .application_times
+                .values()
+                .flatten()
+                .cloned()
+                .collect();
+            build.build_summary.production_times = build
+                .build_summary
+                .helpers
+                .production_times
+                .values()
+                .flatten()
+                .cloned()
+                .collect();
+            build.build_summary.receive_latencies = build
+                .build_summary
+                .helpers
+                .receive_latencies
+                .values()
+                .flatten()
+                .cloned()
+                .collect();
+            Ok(warp::reply::with_status(
+                warp::reply::json(&vec![build]),
+                StatusCode::OK,
+            ))
+        }
         _ => Ok(warp::reply::with_status(
             warp::reply::json(&Vec::<BuildStorage>::new()),
             StatusCode::OK,

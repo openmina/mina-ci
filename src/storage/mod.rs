@@ -39,6 +39,7 @@ pub struct BuildStorage {
 pub struct BuildSummary {
     pub block_count: usize,
     pub cannonical_block_count: usize,
+    pub tx_count: usize,
     pub block_production_min: f64,
     pub block_production_avg: f64,
     pub block_production_max: f64,
@@ -83,6 +84,9 @@ pub struct BuildSummaryHelpers {
     pub production_times: BTreeMap<BlockHeight, Vec<f64>>,
     pub block_count_per_height: BTreeMap<BlockHeight, usize>,
     pub receive_latencies: BTreeMap<BlockHeight, Vec<f64>>,
+
+    /// tx counts at each height
+    pub tx_count_per_height: BTreeMap<BlockHeight, usize>,
 }
 
 impl BuildSummaryHelpers {

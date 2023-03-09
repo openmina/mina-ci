@@ -22,6 +22,8 @@ pub struct BlockTraceAggregatorReport {
     pub receive_latency: Option<f64>,
     pub block_application: Option<f64>,
     pub is_producer: bool,
+    #[serde(skip)]
+    pub included_tranasction_count: Option<usize>,
 }
 
 pub fn aggregate_block_traces(
@@ -69,9 +71,11 @@ pub fn aggregate_block_traces(
         .iter()
         .map(|(node, node_info)| {
             let trace = traces.get(node);
+            let tx_count = trace.and_then(|t| t.metadata.txn_count);
             BlockTraceAggregatorReport {
                 block_hash: state_hash.to_string(),
-                is_producer: producer_nodes.contains(node), // TODO
+                is_producer: producer_nodes.contains(node),
+                included_tranasction_count: tx_count, // TODO
                 height,
                 node: node.to_string(),
                 node_address: node_info.daemon_status.addrs_and_ports.external_ip.clone(),

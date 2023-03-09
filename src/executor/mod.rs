@@ -299,6 +299,30 @@ pub async fn poll_node_traces(
             Err(e) => error!("Error in pulling data: {}", e),
         }
 
+        let tx_count = block_traces
+            .values()
+            .flat_map(|traces| {
+                traces
+                    .iter()
+                    .filter(|val| val.is_producer)
+                    .filter_map(|val| val.included_tranasction_count)
+                    .max()
+            })
+            .max()
+            .unwrap_or_default();
+
+        build_storage
+            .build_summary
+            .helpers
+            .tx_count_per_height
+            .insert(height, tx_count);
+        build_storage.build_summary.tx_count = build_storage
+            .build_summary
+            .helpers
+            .tx_count_per_height
+            .values()
+            .sum();
+
         let application_times: Vec<f64> = block_traces
             .values()
             .flat_map(|traces| {
@@ -310,6 +334,7 @@ pub async fn poll_node_traces(
             })
             .collect();
 
+        // TODO: get from producer_traces
         let production_times: Vec<f64> = block_traces
             .values()
             .flat_map(|traces| {

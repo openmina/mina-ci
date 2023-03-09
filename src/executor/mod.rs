@@ -178,6 +178,10 @@ pub async fn poll_node_traces(
         sleep(environment.data_pull_interval).await;
 
         let build_number = if let Ok(read_state) = state.read() {
+            if !read_state.enable_aggregation {
+                info!("Build locked, waiting for testnet start");
+                continue;
+            }
             read_state.build_number
         } else {
             info!("No CI build yet!");

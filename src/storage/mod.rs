@@ -124,19 +124,22 @@ impl BuildSummaryHelpers {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct StepInfo {
+    pub name: String,
     pub number: usize,
     pub status: String,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct StageInfo {
+    pub name: String,
     pub number: usize,
     pub status: String,
-    pub steps: Vec<StepInfo>,
+    pub steps: Option<Vec<StepInfo>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct BuildInfoExpanded {
+    pub status: String,
     #[serde(skip_serializing)]
     pub stages: Vec<StageInfo>,
 }

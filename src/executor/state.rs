@@ -10,6 +10,9 @@ use crate::{
 
 pub type AggregatorState = Arc<RwLock<AggregatorStateInner>>;
 
+const DEPLOY_PIPELINE_NAME: &str = "deploy-to-cluster-custom";
+const DEPLOY_STEP_NAME: &str = "deploy-nodes";
+
 #[derive(Debug, Default, Clone)]
 pub struct AggregatorStateInner {
     pub build_number: usize,
@@ -43,6 +46,7 @@ pub async fn poll_drone(
 
                 if let Ok(Some(mut build_storage)) = storage.get(build.number) {
                     build_storage.build_info = build.clone();
+
                     let _ = storage.insert(build.number, build_storage);
                 }
 
@@ -80,15 +84,25 @@ pub async fn query_latest_build() -> AggregatorResult<BuildInfo> {
 pub async fn is_deployment_ready(build_number: usize) -> bool {
     match query_deploy_step(build_number).await {
         Ok(build_info) => {
-            if !build_info.stages.is_empty() {
-                if build_info.stages[0].steps.len() >= 12 {
-                    build_info.stages[0].steps[11].status == *"success"
-                } else {
-                    false
-                }
-            } else {
-                false
+            // if the build has any other status than running, return false
+            // NOTE: we don't want to collect data once the tests finished (the testnet is only restarted on the next run)
+            if build_info.status != *"running" {
+                return false;
             }
+            let is_ready = build_info
+                .stages
+                .iter()
+                .find(|s| s.name == DEPLOY_PIPELINE_NAME)
+                .and_then(|stage| {
+                    stage.steps.clone().and_then(|steps| {
+                        steps
+                            .iter()
+                            .find(|step| step.name == DEPLOY_STEP_NAME)
+                            .map(|step| step.status == *"success")
+                    })
+                });
+            // println!("Is ready: {:?}", is_ready);
+            is_ready.unwrap_or(false)
         }
         Err(_) => false,
     }

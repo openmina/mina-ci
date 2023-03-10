@@ -179,7 +179,10 @@ pub async fn poll_node_traces(
 
         let build_number = if let Ok(read_state) = state.read() {
             if !read_state.enable_aggregation {
-                info!("Build locked, waiting for testnet start");
+                info!(
+                    "Build {} locked, waiting for testnet start",
+                    read_state.build_number
+                );
                 continue;
             }
             read_state.build_number

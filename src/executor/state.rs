@@ -53,9 +53,7 @@ pub async fn poll_drone(
                 // TOOD: optimize this part
                 let is_ready = is_deployment_ready(build.number).await;
                 if let Ok(mut write_locked_state) = state.write() {
-                    if !write_locked_state.enable_aggregation {
-                        write_locked_state.enable_aggregation = is_ready;
-                    }
+                    write_locked_state.enable_aggregation = is_ready;
                 }
             }
             Err(_) => {

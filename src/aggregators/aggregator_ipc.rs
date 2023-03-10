@@ -210,17 +210,17 @@ pub fn aggregate_first_receive(
         message_hash_to_block_hash_map.insert(publish_message.events[0].hash.clone(), block_hash);
     }
 
-    println!(
-        "MESSAGE HASH TO BLOCK HASH: {:#?}",
-        message_hash_to_block_hash_map
-    );
+    // println!(
+    //     "MESSAGE HASH TO BLOCK HASH: {:#?}",
+    //     message_hash_to_block_hash_map
+    // );
 
     for event in events.clone() {
         let block_hash =
             if let Some(block_hash) = message_hash_to_block_hash_map.get(&event.events[0].hash) {
                 block_hash.to_string()
             } else {
-                println!("Not found {}", event.events[0].hash);
+                // println!("Not found {}", event.events[0].hash);
                 // panic!();
                 continue;
             };

@@ -58,8 +58,8 @@ pub async fn poll_drone(
                     }
                 }
             }
-            Err(e) => {
-                println!("Can't query drone CI: {}", e);
+            Err(_) => {
+                // println!("Can't query drone CI: {}", e);
                 continue;
             }
         }

@@ -101,7 +101,7 @@ pub fn cross_validate_ipc_with_traces(
             let ipc_latencies = if let Some(ipc_latencies) = ipc_node_latencies.get(&trace.node) {
                 ipc_latencies
             } else {
-                println!("No ipc data for {}", trace.node);
+                // println!("No ipc data for {}", trace.node);
                 report.missing_nodes.push(trace.node.clone());
                 continue;
             };

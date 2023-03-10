@@ -33,6 +33,28 @@ pub struct BuildStorage {
     pub build_info: BuildInfo,
     #[serde(flatten)]
     pub build_summary: BuildSummary,
+    #[serde(skip)]
+    pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BlockSummary {
+    pub height: usize,
+    pub block_hash: String,
+    pub global_slot: Option<String>,
+    pub tx_count: Option<usize>,
+    pub max_receive_latency: f64,
+    pub date_time: Option<f64>,
+    pub block_producer: Option<String>,
+    pub block_producer_nodes: Vec<String>,
+    pub peer_timings: Vec<PeerTiming>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PeerTiming {
+    pub node: String,
+    pub block_processing_time: Option<f64>,
+    pub receive_latency: Option<f64>,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -166,6 +188,7 @@ impl BuildStorage {
             cross_validation_storage: BTreeMap::new(),
             build_info: Default::default(),
             build_summary: Default::default(),
+            block_summaries: Default::default(),
         }
     }
 

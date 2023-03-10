@@ -13,7 +13,7 @@ use crate::{
         collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
         get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
     },
-    storage::AggregatorStorage,
+    storage::{AggregatorStorage, BlockSummary, PeerTiming},
     AggregatorResult,
 };
 
@@ -304,6 +304,53 @@ pub async fn poll_node_traces(
                     .insert(height, report);
             }
             Err(e) => error!("Error in pulling data: {}", e),
+        }
+
+        // per block summaries
+        for (block_hash, block_traces_per_node) in block_traces.iter() {
+            let global_slot = block_traces_per_node
+                .iter()
+                .find_map(|t| t.global_slot.clone());
+            let tx_count = block_traces_per_node
+                .iter()
+                .find_map(|t| t.included_tranasction_count);
+            let date_time = block_traces_per_node.iter().find_map(|t| t.date_time);
+            let block_producer = block_traces_per_node
+                .iter()
+                .find_map(|t| t.block_producer.clone());
+            let block_producer_nodes = block_traces_per_node
+                .iter()
+                .filter(|t| t.is_producer)
+                .map(|t| t.node.clone())
+                .collect();
+            let max_receive_latency = block_traces_per_node
+                .iter()
+                .filter(|t| !t.is_producer)
+                .filter_map(|t| t.receive_latency)
+                .reduce(|a, b| a.max(b))
+                .unwrap_or_default();
+            let peer_timings = block_traces_per_node
+                .iter()
+                .map(|t| PeerTiming {
+                    node: t.node.clone(),
+                    block_processing_time: t.block_application,
+                    receive_latency: t.receive_latency,
+                })
+                .collect();
+            let summary = BlockSummary {
+                block_hash: block_hash.clone(),
+                global_slot,
+                tx_count,
+                date_time,
+                block_producer,
+                block_producer_nodes,
+                max_receive_latency,
+                peer_timings,
+                height,
+            };
+            build_storage
+                .block_summaries
+                .insert(block_hash.to_string(), summary);
         }
 
         let tx_count = block_traces

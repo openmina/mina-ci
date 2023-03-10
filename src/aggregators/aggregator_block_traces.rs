@@ -22,6 +22,8 @@ pub struct BlockTraceAggregatorReport {
     pub receive_latency: Option<f64>,
     pub block_application: Option<f64>,
     pub is_producer: bool,
+    pub block_producer: Option<String>,
+    pub global_slot: Option<String>,
     #[serde(skip)]
     pub included_tranasction_count: Option<usize>,
 }
@@ -75,6 +77,8 @@ pub fn aggregate_block_traces(
             BlockTraceAggregatorReport {
                 block_hash: state_hash.to_string(),
                 is_producer: producer_nodes.contains(node),
+                global_slot: trace.and_then(|t| t.metadata.global_slot.clone()),
+                block_producer: trace.and_then(|t| t.metadata.creator.clone()),
                 included_tranasction_count: tx_count, // TODO
                 height,
                 node: node.to_string(),

@@ -5,7 +5,7 @@ use crate::{
         BlockTraceAggregatorReport, CpnpBlockPublication, CpnpBlockPublicationFlattened,
     },
     cross_validation::{aggregate_cross_validations, ValidationReport},
-    storage::{AggregatorStorage, BuildStorage},
+    storage::{AggregatorStorage, BlockSummary, BuildStorage},
 };
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -331,6 +331,21 @@ pub async fn get_build_summary(
     }
 }
 
+pub async fn get_block_summaries(
+    build_num: usize,
+    storage: AggregatorStorage,
+) -> Result<impl warp::Reply, warp::reject::Rejection> {
+    match storage.get(build_num) {
+        Ok(Some(build)) => Ok(warp::reply::with_status(
+            warp::reply::json(&build.block_summaries.values().collect::<Vec<_>>()),
+            StatusCode::OK,
+        )),
+        _ => Ok(warp::reply::with_status(
+            warp::reply::json(&Vec::<BlockSummary>::new()),
+            StatusCode::OK,
+        )),
+    }
+}
 // fn empty_json<T: Serialize + Default>(res: T) -> impl warp::Reply {
 //     warp::reply::with_status(
 //         warp::reply::json(&T::default()),

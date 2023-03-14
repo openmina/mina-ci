@@ -251,7 +251,6 @@ pub async fn get_build_summaries(
                 .into_iter()
                 .map(|mut build| {
                     build.build_summary.application_times = build
-                        .build_summary
                         .helpers
                         .application_times
                         .values()
@@ -259,7 +258,6 @@ pub async fn get_build_summaries(
                         .cloned()
                         .collect();
                     build.build_summary.production_times = build
-                        .build_summary
                         .helpers
                         .production_times
                         .values()
@@ -267,7 +265,6 @@ pub async fn get_build_summaries(
                         .cloned()
                         .collect();
                     build.build_summary.receive_latencies = build
-                        .build_summary
                         .helpers
                         .receive_latencies
                         .values()
@@ -296,7 +293,6 @@ pub async fn get_build_summary(
     match storage.get(build_num) {
         Ok(Some(mut build)) => {
             build.build_summary.application_times = build
-                .build_summary
                 .helpers
                 .application_times
                 .values()
@@ -304,7 +300,6 @@ pub async fn get_build_summary(
                 .cloned()
                 .collect();
             build.build_summary.production_times = build
-                .build_summary
                 .helpers
                 .production_times
                 .values()
@@ -312,7 +307,6 @@ pub async fn get_build_summary(
                 .cloned()
                 .collect();
             build.build_summary.receive_latencies = build
-                .build_summary
                 .helpers
                 .receive_latencies
                 .values()

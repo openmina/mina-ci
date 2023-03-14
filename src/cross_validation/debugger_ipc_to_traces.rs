@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::aggregators::{BlockHash, BlockTraceAggregatorReport, CpnpBlockPublication};
 
 pub type ComparisonDeltas = BTreeMap<String, f64>;
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ValidationReport {
     // pub measured_latency_comparison: BTreeMap<String, f64>,
     pub received_time_comparison: ComparisonDeltas,

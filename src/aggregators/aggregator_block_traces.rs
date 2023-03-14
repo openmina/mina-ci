@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     nodes::{BlockStructuredTrace, DaemonMetrics, DaemonStatusDataSlim, TraceSource, TraceStatus},
     AggregatorResult,
 };
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockTraceAggregatorReport {
     pub height: usize,
     pub block_hash: String,

@@ -4,7 +4,7 @@ use petgraph::algo::{connected_components, is_cyclic_directed};
 // use petgraph::dot::Dot;
 use petgraph::prelude::*;
 use petgraph::{Directed, Graph};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse};
 
@@ -14,7 +14,7 @@ pub type NodeIP = String;
 pub type BlockHash = String;
 pub type MessageGraph = Graph<String, u64, Directed>;
 
-#[derive(Debug, Default, Serialize, Clone)]
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 pub struct CpnpLatencyAggregationData {
     pub message_source: NodeIP,
     pub message_source_tag: String,
@@ -27,7 +27,8 @@ pub struct CpnpLatencyAggregationData {
     pub latency_since_block_publication_seconds: f64,
 }
 
-#[derive(Debug, Default, Serialize, Clone)]
+// TODO: Fix serde stuff when dumping storage!!
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 pub struct CpnpBlockPublication {
     #[serde(flatten)]
     pub node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData>,
@@ -52,7 +53,7 @@ pub struct CpnpBlockPublicationFlattened {
     pub graph: MessageGraph,
 }
 
-#[derive(Debug, Default, Serialize, Clone)]
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 pub struct MessageGraphInfo {
     pub node_count: usize,
     pub source_node_count: usize,

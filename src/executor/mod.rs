@@ -366,16 +366,11 @@ pub async fn poll_node_traces(
             .unwrap_or_default();
 
         build_storage
-            .build_summary
             .helpers
             .tx_count_per_height
             .insert(height, tx_count);
-        build_storage.build_summary.tx_count = build_storage
-            .build_summary
-            .helpers
-            .tx_count_per_height
-            .values()
-            .sum();
+        build_storage.build_summary.tx_count =
+            build_storage.helpers.tx_count_per_height.values().sum();
 
         let application_times: Vec<f64> = block_traces
             .values()
@@ -462,66 +457,52 @@ pub async fn poll_node_traces(
             .sum();
 
         build_storage
-            .build_summary
             .helpers
             .application_times
             .insert(height, application_times);
         build_storage
-            .build_summary
             .helpers
             .production_times
             .insert(height, production_times);
         build_storage
-            .build_summary
             .helpers
             .receive_latencies
             .insert(height, receive_latencies);
 
         build_storage
-            .build_summary
             .helpers
             .application_avg_total_count
             .insert(height, application_measurement_count);
         build_storage
-            .build_summary
             .helpers
             .application_total
             .insert(height, application_time_sum);
         build_storage
-            .build_summary
             .helpers
             .production_avg_total_count
             .insert(height, production_measurement_count);
         build_storage
-            .build_summary
             .helpers
             .production_total
             .insert(height, production_time_sum);
         // the count is same as the application ones (optimization: remove this helper map and use the application map?)
         build_storage
-            .build_summary
             .helpers
             .receive_latencies_avg_total_count
             .insert(height, application_measurement_count);
         build_storage
-            .build_summary
             .helpers
             .receive_latencies_total
             .insert(height, receive_latencies_sum);
 
         build_storage
-            .build_summary
             .helpers
             .block_count_per_height
             .insert(height, unique_block_count);
-        build_storage.build_summary.block_count = build_storage
-            .build_summary
-            .helpers
-            .block_count_per_height
-            .values()
-            .sum();
+        build_storage.build_summary.block_count =
+            build_storage.helpers.block_count_per_height.values().sum();
         build_storage.build_summary.cannonical_block_count =
-            build_storage.build_summary.helpers.application_total.len();
+            build_storage.helpers.application_total.len();
 
         if build_storage.build_summary.block_application_min == 0.0 {
             build_storage.build_summary.block_application_min = application_min;
@@ -531,10 +512,8 @@ pub async fn poll_node_traces(
         }
         build_storage.build_summary.block_application_max =
             application_max.max(build_storage.build_summary.block_application_max);
-        build_storage.build_summary.block_application_avg = build_storage
-            .build_summary
-            .helpers
-            .get_application_average();
+        build_storage.build_summary.block_application_avg =
+            build_storage.helpers.get_application_average();
 
         if build_storage.build_summary.block_production_min == 0.0 {
             build_storage.build_summary.block_production_min = production_min;
@@ -545,7 +524,7 @@ pub async fn poll_node_traces(
         build_storage.build_summary.block_production_max =
             production_max.max(build_storage.build_summary.block_production_max);
         build_storage.build_summary.block_production_avg =
-            build_storage.build_summary.helpers.get_production_average();
+            build_storage.helpers.get_production_average();
 
         if build_storage.build_summary.receive_latency_min == 0.0 {
             build_storage.build_summary.receive_latency_min = receive_latencies_min;
@@ -556,7 +535,7 @@ pub async fn poll_node_traces(
         build_storage.build_summary.receive_latency_max =
             receive_latencies_max.max(build_storage.build_summary.receive_latency_max);
         build_storage.build_summary.receive_latency_avg =
-            build_storage.build_summary.helpers.get_latencies_average();
+            build_storage.helpers.get_latencies_average();
 
         let _ = storage.insert(build_number, build_storage);
     }

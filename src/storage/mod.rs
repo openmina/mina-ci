@@ -34,10 +34,51 @@ pub struct BuildStorage {
     #[serde(flatten)]
     pub build_summary: BuildSummary,
     #[serde(skip)]
+    pub helpers: BuildSummaryHelpers,
+    #[serde(skip)]
     pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+impl From<BuildStorage> for BuildStorageDump {
+    fn from(value: BuildStorage) -> Self {
+        Self {
+            ipc_storage: value.ipc_storage,
+            trace_storage: value.trace_storage,
+            cross_validation_storage: value.cross_validation_storage,
+            build_info: value.build_info,
+            build_summary: value.build_summary,
+            block_summaries: value.block_summaries,
+            helpers: value.helpers,
+        }
+    }
+}
+
+impl From<BuildStorageDump> for BuildStorage {
+    fn from(value: BuildStorageDump) -> Self {
+        Self {
+            ipc_storage: value.ipc_storage,
+            trace_storage: value.trace_storage,
+            cross_validation_storage: value.cross_validation_storage,
+            build_info: value.build_info,
+            build_summary: value.build_summary,
+            block_summaries: value.block_summaries,
+            helpers: value.helpers,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildStorageDump {
+    pub ipc_storage: IpcAggregatorStorage,
+    pub trace_storage: BlockTraceAggregatorStorage,
+    pub cross_validation_storage: CrossValidationStorage,
+    pub build_info: BuildInfo,
+    pub build_summary: BuildSummary,
+    pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
+    pub helpers: BuildSummaryHelpers,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockSummary {
     pub height: usize,
     pub block_hash: String,
@@ -50,14 +91,14 @@ pub struct BlockSummary {
     pub peer_timings: Vec<PeerTiming>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerTiming {
     pub node: String,
     pub block_processing_time: Option<f64>,
     pub receive_latency: Option<f64>,
 }
 
-#[derive(Debug, Default, Clone, Serialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BuildSummary {
     pub block_count: usize,
     pub cannonical_block_count: usize,
@@ -74,8 +115,6 @@ pub struct BuildSummary {
     pub application_times: Vec<f64>,
     pub production_times: Vec<f64>,
     pub receive_latencies: Vec<f64>,
-    #[serde(skip)]
-    pub helpers: BuildSummaryHelpers,
     // #[serde(skip)]
     // pub avg_total_count: usize,
     // #[serde(skip)]
@@ -86,7 +125,7 @@ pub struct BuildSummary {
     // pub latency
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BuildSummaryHelpers {
     /// Total occurences, to calculate the avg
     pub application_avg_total_count: BTreeMap<BlockHeight, usize>,
@@ -168,15 +207,13 @@ pub struct BuildInfoExpanded {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct BuildInfo {
-    #[serde(skip_serializing)]
-    pub id: usize,
     pub number: usize,
-    #[serde(rename(serialize = "commit"))]
+    #[serde(rename(serialize = "commit"), alias = "commit")]
     pub after: String,
     pub status: String,
     pub started: u64,
     pub message: String,
-    #[serde(rename(serialize = "branch"))]
+    #[serde(rename(serialize = "branch"), alias = "branch")]
     pub source: String,
 }
 
@@ -189,6 +226,7 @@ impl BuildStorage {
             build_info: Default::default(),
             build_summary: Default::default(),
             block_summaries: Default::default(),
+            helpers: Default::default(),
         }
     }
 

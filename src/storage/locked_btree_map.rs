@@ -11,9 +11,9 @@ pub struct LockedBTreeMap<K: Ord + Clone, V: Clone> {
 }
 
 impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
-    pub fn new() -> Self {
+    pub fn new(inner: BTreeMap<K, V>) -> Self {
         Self {
-            inner: Arc::new(RwLock::new(BTreeMap::new())),
+            inner: Arc::new(RwLock::new(inner)),
         }
     }
 
@@ -93,10 +93,21 @@ impl<K: Ord + Clone, V: Clone> LockedBTreeMap<K, V> {
                 reason: e.to_string(),
             })
     }
+
+    pub fn to_btreemap(&self) -> Result<BTreeMap<K, V>, AggregatorError> {
+        self.inner
+            .read()
+            .map(|read_locked_storage| read_locked_storage.clone())
+            .map_err(|e| AggregatorError::StorageError {
+                reason: e.to_string(),
+            })
+    }
 }
 
 impl<K: Ord + Clone, V: Clone> Default for LockedBTreeMap<K, V> {
     fn default() -> Self {
-        Self::new()
+        Self {
+            inner: Arc::new(RwLock::new(BTreeMap::new())),
+        }
     }
 }

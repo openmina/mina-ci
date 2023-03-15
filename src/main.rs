@@ -28,7 +28,7 @@ async fn main() {
         &environment.remote_storage_url,
         &environment.remote_storage_user,
         &environment.remote_storage_password,
-        "/home/aggregator/storage.json",
+        &environment.remote_storage_path,
     );
 
     // let aggregator_storage = LockedBTreeMap::new();

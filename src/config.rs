@@ -7,6 +7,7 @@ pub const CLUSTER_NODE_LIST_URL: &str = "http://1.k8.openmina.com:31311/nodes";
 const CLUSTER_BASE_URL: &str = "http://1.k8.openmina.com:31308";
 const CI_API_URL: &str = "https://ci.openmina.com/api";
 const REMOTE_STORAGE_URL: &str = "ci.openmina.com:22";
+const REMOTE_STORAGE_PATH: &str = "/home/aggregator/storage.json";
 
 const DATA_PULL_INTERVAL_DEFAULT: u64 = 10;
 
@@ -25,6 +26,7 @@ pub struct AggregatorEnvironment {
     pub remote_storage_url: String,
     pub remote_storage_user: String,
     pub remote_storage_password: String,
+    pub remote_storage_path: String,
 }
 
 pub fn set_environment() -> AggregatorEnvironment {
@@ -78,6 +80,8 @@ pub fn set_environment() -> AggregatorEnvironment {
         env::var("REMOTE_STORAGE_USER").expect("REMOTE_STORAGE_USER environment var must be set!");
     let remote_storage_password = env::var("REMOTE_STORAGE_PASSWORD")
         .expect("REMOTE_STORAGE_PASSWORD environment var must be set!");
+    let remote_storage_path =
+        env::var("REMOTE_STORAGE_PATH").unwrap_or_else(|_| REMOTE_STORAGE_PATH.to_string());
 
     AggregatorEnvironment {
         plain_node_count,
@@ -93,5 +97,6 @@ pub fn set_environment() -> AggregatorEnvironment {
         remote_storage_url,
         remote_storage_user,
         remote_storage_password,
+        remote_storage_path,
     }
 }

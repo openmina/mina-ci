@@ -4,7 +4,7 @@ use tokio::time::sleep;
 
 use crate::{
     config::AggregatorEnvironment,
-    storage::{AggregatorStorage, BuildInfo, BuildInfoExpanded, BuildStorage},
+    storage::{AggregatorStorage, BuildInfo, BuildInfoExpanded, BuildStorage, RemoteStorage},
     AggregatorResult,
 };
 
@@ -24,6 +24,7 @@ pub async fn poll_drone(
     state: &AggregatorState,
     environment: &AggregatorEnvironment,
     storage: &mut AggregatorStorage,
+    remote_storage: &RemoteStorage,
 ) {
     loop {
         sleep(environment.data_pull_interval).await;
@@ -33,6 +34,8 @@ pub async fn poll_drone(
                 // println!("BUILD: {:#?}", build);
                 if let Ok(mut write_locked_state) = state.write() {
                     if write_locked_state.build_number != build.number {
+                        // save the storage when detecting new build
+                        remote_storage.save_storage(storage);
                         write_locked_state.build_number = build.number;
                         write_locked_state.enable_aggregation = false;
 

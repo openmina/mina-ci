@@ -80,7 +80,7 @@ impl RemoteStorage {
         Ok(())
     }
 
-    pub fn save_storage(&self, storage: AggregatorStorage) {
+    pub fn save_storage(&self, storage: &AggregatorStorage) {
         let raw: BTreeMap<usize, BuildStorageDump> = storage
             .to_btreemap()
             .expect("Cannot convert to btreemap")

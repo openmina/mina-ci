@@ -39,8 +39,15 @@ async fn main() {
     let mut t_aggregator_storage = aggregator_storage.clone();
     let t_state = state.clone();
     let t_environment = environment.clone();
+    let t_remote_storage = remote_storage.clone();
     let drone_handle = tokio::spawn(async move {
-        poll_drone(&t_state, &t_environment, &mut t_aggregator_storage).await
+        poll_drone(
+            &t_state,
+            &t_environment,
+            &mut t_aggregator_storage,
+            &t_remote_storage,
+        )
+        .await
     });
 
     let mut t_aggregator_storage = aggregator_storage.clone();
@@ -69,7 +76,7 @@ async fn main() {
 
     info!("Dumping storage to remote");
     // remote_storage.upload_storage(&data).unwrap();
-    remote_storage.save_storage(aggregator_storage);
+    remote_storage.save_storage(&aggregator_storage);
 
     drop(drone_handle);
     drop(aggregator_handle);

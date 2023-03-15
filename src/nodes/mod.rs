@@ -44,7 +44,7 @@ async fn query_node(
     Ok(client
         .post(url)
         .body(payload)
-        .timeout(Duration::from_secs(10))
+        // .timeout(Duration::from_secs(10))
         .header("Content-Type", "application/json")
         .send()
         .await?)

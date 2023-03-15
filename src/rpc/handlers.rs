@@ -31,7 +31,9 @@ impl BuildsQueryOptions {
     //     }
     // }
     fn status_filters(&self) -> Option<Vec<String>> {
-        self.status.as_ref().map(|s| s.split(',').map(|s| s.to_string()).collect())
+        self.status
+            .as_ref()
+            .map(|s| s.split(',').map(|s| s.to_string()).collect())
     }
 }
 
@@ -265,7 +267,6 @@ pub async fn get_build_summaries(
     options: BuildsQueryOptions,
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-
     let status_filter = match options.status_filters() {
         Some(filter) => filter,
         // Only retrieve success builds when no filter is aplied
@@ -309,21 +310,38 @@ pub async fn get_build_summaries(
                 .into_iter()
                 .tuple_windows::<(BuildStorage, BuildStorage)>()
                 .map(|(mut w0, w1)| {
-                    w0.build_summary.block_application_avg_delta = w1.build_summary.block_application_avg - w0.build_summary.block_application_avg;
-                    w0.build_summary.block_application_max_delta = w1.build_summary.block_application_max - w0.build_summary.block_application_max;
-                    w0.build_summary.block_application_min_delta = w1.build_summary.block_application_min - w0.build_summary.block_application_min;
+                    w0.build_summary.block_application_avg_delta =
+                        w1.build_summary.block_application_avg
+                            - w0.build_summary.block_application_avg;
+                    w0.build_summary.block_application_max_delta =
+                        w1.build_summary.block_application_max
+                            - w0.build_summary.block_application_max;
+                    w0.build_summary.block_application_min_delta =
+                        w1.build_summary.block_application_min
+                            - w0.build_summary.block_application_min;
 
-                    w0.build_summary.block_production_avg_delta = w1.build_summary.block_production_avg - w0.build_summary.block_production_avg;
-                    w0.build_summary.block_production_max_delta = w1.build_summary.block_production_max - w0.build_summary.block_production_max;
-                    w0.build_summary.block_production_min_delta = w1.build_summary.block_production_min - w0.build_summary.block_production_min;
+                    w0.build_summary.block_production_avg_delta =
+                        w1.build_summary.block_production_avg
+                            - w0.build_summary.block_production_avg;
+                    w0.build_summary.block_production_max_delta =
+                        w1.build_summary.block_production_max
+                            - w0.build_summary.block_production_max;
+                    w0.build_summary.block_production_min_delta =
+                        w1.build_summary.block_production_min
+                            - w0.build_summary.block_production_min;
 
-                    w0.build_summary.receive_latency_avg_delta = w1.build_summary.receive_latency_avg - w0.build_summary.receive_latency_avg;
-                    w0.build_summary.receive_latency_max_delta = w1.build_summary.receive_latency_max - w0.build_summary.receive_latency_max;
-                    w0.build_summary.receive_latency_min_delta = w1.build_summary.receive_latency_min - w0.build_summary.receive_latency_min;
+                    w0.build_summary.receive_latency_avg_delta =
+                        w1.build_summary.receive_latency_avg - w0.build_summary.receive_latency_avg;
+                    w0.build_summary.receive_latency_max_delta =
+                        w1.build_summary.receive_latency_max - w0.build_summary.receive_latency_max;
+                    w0.build_summary.receive_latency_min_delta =
+                        w1.build_summary.receive_latency_min - w0.build_summary.receive_latency_min;
 
-                    w0.build_summary.application_times_previous = w1.build_summary.application_times;
+                    w0.build_summary.application_times_previous =
+                        w1.build_summary.application_times;
                     w0.build_summary.production_times_previous = w1.build_summary.production_times;
-                    w0.build_summary.receive_latencies_previous = w1.build_summary.receive_latencies;
+                    w0.build_summary.receive_latencies_previous =
+                        w1.build_summary.receive_latencies;
                     w0
                 })
                 .collect();

@@ -7,7 +7,7 @@ use super::handlers::{
     get_aggregated_block_receive_data, get_aggregated_block_receive_data_latest,
     get_aggregated_block_trace_data, get_aggregated_block_trace_data_latest,
     get_aggregated_block_trace_data_latest_height, get_block_summaries, get_build_summaries,
-    get_build_summary, get_cross_validations_count_handler, QueryOptions, BuildsQueryOptions,
+    get_build_summary, get_cross_validations_count_handler, BuildsQueryOptions, QueryOptions,
 };
 
 pub fn filters(

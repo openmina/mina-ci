@@ -77,7 +77,13 @@ async fn query_producer_internal_blocks(
             trace.blockchain_length_int == most_recent_height
                 && matches!(trace.source, TraceSource::Internal)
         })
-        .map(|trace| (trace.blockchain_length_int, trace.state_hash, tag.to_string()))
+        .map(|trace| {
+            (
+                trace.blockchain_length_int,
+                trace.state_hash,
+                tag.to_string(),
+            )
+        })
         .collect();
 
     Ok(produced_blocks)

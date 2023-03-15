@@ -16,4 +16,10 @@ pub enum AggregatorError {
 
     #[error("Nodes have not produced any traces yet!")]
     NoTracesYet,
+
+    #[error("Error while communicating with remote storage, reason: {0}")]
+    SshError(#[from] ssh2::Error),
+
+    #[error("IO Error, reason: {0}")]
+    IoError(#[from] std::io::Error),
 }

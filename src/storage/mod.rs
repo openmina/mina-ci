@@ -119,6 +119,18 @@ pub struct BuildSummary {
     pub application_times: Vec<f64>,
     pub production_times: Vec<f64>,
     pub receive_latencies: Vec<f64>,
+    pub block_production_min_delta: f64,
+    pub block_production_avg_delta: f64,
+    pub block_production_max_delta: f64,
+    pub block_application_min_delta: f64,
+    pub block_application_avg_delta: f64,
+    pub block_application_max_delta: f64,
+    pub receive_latency_min_delta: f64,
+    pub receive_latency_avg_delta: f64,
+    pub receive_latency_max_delta: f64,
+    pub application_times_previous: Vec<f64>,
+    pub production_times_previous: Vec<f64>,
+    pub receive_latencies_previous: Vec<f64>,
     // #[serde(skip)]
     // pub avg_total_count: usize,
     // #[serde(skip)]

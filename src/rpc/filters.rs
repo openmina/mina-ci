@@ -7,7 +7,7 @@ use super::handlers::{
     get_aggregated_block_receive_data, get_aggregated_block_receive_data_latest,
     get_aggregated_block_trace_data, get_aggregated_block_trace_data_latest,
     get_aggregated_block_trace_data_latest_height, get_block_summaries, get_build_summaries,
-    get_build_summary, get_cross_validations_count_handler, QueryOptions,
+    get_build_summary, get_cross_validations_count_handler, QueryOptions, BuildsQueryOptions,
 };
 
 pub fn filters(
@@ -38,6 +38,7 @@ fn build_summaries(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("builds")
         .and(warp::get())
+        .and(warp::query::<BuildsQueryOptions>())
         .and(with_storage(storage))
         .and_then(get_build_summaries)
 }

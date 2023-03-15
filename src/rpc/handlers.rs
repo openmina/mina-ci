@@ -7,6 +7,7 @@ use crate::{
     cross_validation::{aggregate_cross_validations, ValidationReport},
     storage::{AggregatorStorage, BlockSummary, BuildStorage},
 };
+use itertools::Itertools;
 use reqwest::StatusCode;
 use serde::Deserialize;
 
@@ -14,6 +15,24 @@ use serde::Deserialize;
 #[allow(dead_code)]
 pub struct QueryOptions {
     count: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct BuildsQueryOptions {
+    status: Option<String>,
+}
+
+impl BuildsQueryOptions {
+    // fn status_filters(&self) -> Vec<String> {
+    //     match &self.status {
+    //         Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+    //         None => vec![],
+    //     }
+    // }
+    fn status_filters(&self) -> Option<Vec<String>> {
+        self.status.as_ref().map(|s| s.split(',').map(|s| s.to_string()).collect())
+    }
 }
 
 pub async fn get_aggregated_block_receive_data(
@@ -243,12 +262,22 @@ pub async fn get_cross_validations_count_handler(
 }
 
 pub async fn get_build_summaries(
+    options: BuildsQueryOptions,
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
+
+    let status_filter = match options.status_filters() {
+        Some(filter) => filter,
+        // Only retrieve success builds when no filter is aplied
+        None => vec!["success".to_string()],
+    };
+
     match storage.get_values() {
         Ok(values) => {
             let res: Vec<BuildStorage> = values
                 .into_iter()
+                .rev()
+                .filter(|build| status_filter.contains(&build.build_info.status))
                 .map(|mut build| {
                     build.build_summary.application_times = build
                         .helpers
@@ -274,8 +303,34 @@ pub async fn get_build_summaries(
                     build
                 })
                 .collect();
+            let last_value = res.last().cloned().unwrap_or_default();
+            // calculate deltas
+            let mut final_res: Vec<BuildStorage> = res
+                .into_iter()
+                .tuple_windows::<(BuildStorage, BuildStorage)>()
+                .map(|(mut w0, w1)| {
+                    w0.build_summary.block_application_avg_delta = w1.build_summary.block_application_avg - w0.build_summary.block_application_avg;
+                    w0.build_summary.block_application_max_delta = w1.build_summary.block_application_max - w0.build_summary.block_application_max;
+                    w0.build_summary.block_application_min_delta = w1.build_summary.block_application_min - w0.build_summary.block_application_min;
+
+                    w0.build_summary.block_production_avg_delta = w1.build_summary.block_production_avg - w0.build_summary.block_production_avg;
+                    w0.build_summary.block_production_max_delta = w1.build_summary.block_production_max - w0.build_summary.block_production_max;
+                    w0.build_summary.block_production_min_delta = w1.build_summary.block_production_min - w0.build_summary.block_production_min;
+
+                    w0.build_summary.receive_latency_avg_delta = w1.build_summary.receive_latency_avg - w0.build_summary.receive_latency_avg;
+                    w0.build_summary.receive_latency_max_delta = w1.build_summary.receive_latency_max - w0.build_summary.receive_latency_max;
+                    w0.build_summary.receive_latency_min_delta = w1.build_summary.receive_latency_min - w0.build_summary.receive_latency_min;
+
+                    w0.build_summary.application_times_previous = w1.build_summary.application_times;
+                    w0.build_summary.production_times_previous = w1.build_summary.production_times;
+                    w0.build_summary.receive_latencies_previous = w1.build_summary.receive_latencies;
+                    w0
+                })
+                .collect();
+            // add the last value as is (nothing to comapre to)
+            final_res.push(last_value);
             Ok(warp::reply::with_status(
-                warp::reply::json(&res),
+                warp::reply::json(&final_res),
                 StatusCode::OK,
             ))
         }

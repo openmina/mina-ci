@@ -1,19 +1,18 @@
 ## How to start a CI run
 
 1. Go to https://ci.openmina.com/
-2. Log in using github credentials
-3. (You can skip the Drone registration by submitting an empty form)
-4. Navigate to the openmina/mina repository
-5. Click on NEW BUILD button in the top right corner
-6. Into the Branch field type in `openmina-berkeley`. This is needs to be set to the branch that includes all modified helm charts and our .drone.yml file, which is the configuration file for the CI builds.
-7. (Optional) You can specify parameters (see bellow) as key-value pairs to customize the build
-8. Click on Create
+2. Log in using your GitHub credentials (You can skip the Drone registration by submitting an empty form)
+3. Navigate to the openmina/mina repository
+4. Click on NEW BUILD button in the top right corner
+5. Into the Branch field, type in `openmina-berkeley`. This needs to be set to the branch that includes all modified helm charts and our .drone.yml file, which is the configuration file for the CI builds.
+6. (Optional) You can specify parameters (see bellow) as key-value pairs to customize the build
+7. Click on Create.
 
 ### Customization
 
-If you do not specify any additional Parameters, the build will run with it's default parameters.
+If you do not specify any additional Parameters, the build will run with its default parameters.
 
-Avalable parameters:
+Available parameters:
 
 | Parameter      | Description                              | Default value |
 | -------------- | ---------------------------------------- | ------------- |
@@ -23,9 +22,9 @@ Avalable parameters:
 
 Notes:
 
-- For now in the `Branch` field, you have to specify `openmina-berkeley`, i.e. the branch we have all our modified helm charts in. To pick a branch to build the image from, you have to specify `MINA_BRANCH`. If you want to build from a branch that is in a different repository (e.x.: MinaProtocol/mina), you have to specify two parameters `MINA_REPO` and `MINA_BRANCH`. 
+- For now, in the `Branch` field, you have to specify `openmina-berkeley`, i.e. the branch we have all our modified helm charts in. To pick a branch to build the image from, you have to specify `MINA_BRANCH`. If you want to build from a branch that is in a different repository (e.x.: MinaProtocol/mina), you have to specify two parameters `MINA_REPO` and `MINA_BRANCH`. 
 
-- The namespace has to be prepared beforhand to include all the resources (like secrets). Currently we have only one namespace available: `testnet-default`.
+- The namespace has to be prepared beforehand to include all the resources (like secrets). Currently, we have only one namespace available: `testnet-default`.
 
 ### Testnet network specification
 

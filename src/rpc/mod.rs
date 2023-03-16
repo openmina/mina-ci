@@ -3,20 +3,11 @@ pub mod handlers;
 
 use tokio::task::JoinHandle;
 
-use crate::{BlockTraceAggregatorStorage, CrossValidationStorage, IpcAggregatorStorage};
+use crate::storage::AggregatorStorage;
 
-pub fn spawn_rpc_server(
-    rpc_port: u16,
-    ipc_storage: IpcAggregatorStorage,
-    block_trace_storage: BlockTraceAggregatorStorage,
-    cross_validation_storage: CrossValidationStorage,
-) -> JoinHandle<()> {
+pub fn spawn_rpc_server(rpc_port: u16, storage: AggregatorStorage) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let api = filters::filters(
-            ipc_storage.clone(),
-            block_trace_storage.clone(),
-            cross_validation_storage.clone(),
-        );
+        let api = filters::filters(storage.clone());
 
         warp::serve(api).run(([0, 0, 0, 0], rpc_port)).await;
     })

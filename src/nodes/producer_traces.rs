@@ -27,7 +27,7 @@ pub struct BlockTraces {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockTrace {
     source: TraceSource,
-    blockchain_length: String,
+    blockchain_length_int: usize,
     state_hash: String,
     status: TraceStatus,
     total_time: f64,
@@ -54,7 +54,7 @@ async fn query_producer_internal_blocks(
     url: &str,
     tag: &str,
     // block_count: usize,
-) -> AggregatorResult<Vec<(String, String, String)>> {
+) -> AggregatorResult<Vec<(usize, String, String)>> {
     let res: GraphqlResponse<BlockTracesData> = query_node(client, url, TRACES_PAYLOAD.to_string())
         .await?
         .json()
@@ -65,18 +65,25 @@ async fn query_producer_internal_blocks(
     traces.reverse();
 
     let most_recent_height = if !traces.is_empty() {
-        traces[0].blockchain_length.clone()
+        // traces[0].blockchain_length.clone()
+        traces[0].blockchain_length_int
     } else {
         return Ok(vec![]);
     };
 
-    let produced_blocks: Vec<(String, String, String)> = traces
+    let produced_blocks: Vec<(usize, String, String)> = traces
         .into_iter()
         .filter(|trace| {
-            trace.blockchain_length == most_recent_height
+            trace.blockchain_length_int == most_recent_height
                 && matches!(trace.source, TraceSource::Internal)
         })
-        .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
+        .map(|trace| {
+            (
+                trace.blockchain_length_int,
+                trace.state_hash,
+                tag.to_string(),
+            )
+        })
         .collect();
 
     Ok(produced_blocks)
@@ -106,13 +113,13 @@ pub async fn get_most_recent_produced_blocks(
             match b {
                 Ok((url, Ok(res))) => {
                     debug!("{url} OK");
-                    let res: Vec<(usize, String, String)> = res
-                        .into_iter()
-                        .map(|(height, state_hash, tag)| {
-                            // parsing shold be OK, as it is always a positive number, but lets change the graphql to report a number as height
-                            (height.parse::<usize>().unwrap(), state_hash, tag)
-                        })
-                        .collect();
+                    // let res: Vec<(usize, String, String)> = res
+                    //     .into_iter()
+                    //     .map(|(height, state_hash, tag)| {
+                    //         // parsing shold be OK, as it is always a positive number, but lets change the graphql to report a number as height
+                    //         (height.parse::<usize>().unwrap(), state_hash, tag)
+                    //     })
+                    //     .collect();
                     collected.extend(res);
                 }
                 Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
@@ -123,7 +130,7 @@ pub async fn get_most_recent_produced_blocks(
         .await;
 
     info!("Collected {} produced blocks", collected.len());
-    println!("Blocks: {:#?}", collected);
+    // println!("Blocks: {:#?}", collected);
 
     collected
 }

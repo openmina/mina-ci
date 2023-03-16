@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     nodes::{BlockStructuredTrace, DaemonMetrics, DaemonStatusDataSlim, TraceSource, TraceStatus},
     AggregatorResult,
 };
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockTraceAggregatorReport {
     pub height: usize,
     pub block_hash: String,
@@ -22,6 +22,10 @@ pub struct BlockTraceAggregatorReport {
     pub receive_latency: Option<f64>,
     pub block_application: Option<f64>,
     pub is_producer: bool,
+    pub block_producer: Option<String>,
+    pub global_slot: Option<String>,
+    #[serde(skip)]
+    pub included_tranasction_count: Option<usize>,
 }
 
 pub fn aggregate_block_traces(
@@ -43,10 +47,17 @@ pub fn aggregate_block_traces(
         .collect();
 
     internal_receivers.sort_by(|(_, a_trace), (_, b_trace)| {
-        a_trace.sections[0].checkpoints[0]
-            .started_at
-            .total_cmp(&b_trace.sections[0].checkpoints[0].started_at)
+        (a_trace.sections[0].checkpoints[0].started_at + a_trace.total_time)
+            .total_cmp(&(b_trace.sections[0].checkpoints[0].started_at + b_trace.total_time))
     });
+
+    // println!(
+    //     "IT: {:#?}",
+    //     internal_receivers
+    //         .iter()
+    //         .map(|v| v.1.sections[0].checkpoints[0].started_at)
+    //         .collect::<Vec<_>>()
+    // );
 
     // println!("IT: {:#?}", internal_receivers);
     let producer_nodes: Vec<String> = internal_receivers
@@ -62,9 +73,13 @@ pub fn aggregate_block_traces(
         .iter()
         .map(|(node, node_info)| {
             let trace = traces.get(node);
+            let tx_count = trace.and_then(|t| t.metadata.txn_count);
             BlockTraceAggregatorReport {
                 block_hash: state_hash.to_string(),
-                is_producer: producer_nodes.contains(node), // TODO
+                is_producer: producer_nodes.contains(node),
+                global_slot: trace.and_then(|t| t.metadata.global_slot.clone()),
+                block_producer: trace.and_then(|t| t.metadata.creator.clone()),
+                included_tranasction_count: tx_count, // TODO
                 height,
                 node: node.to_string(),
                 node_address: node_info.daemon_status.addrs_and_ports.external_ip.clone(),

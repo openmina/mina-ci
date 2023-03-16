@@ -4,7 +4,7 @@ use petgraph::algo::{connected_components, is_cyclic_directed};
 // use petgraph::dot::Dot;
 use petgraph::prelude::*;
 use petgraph::{Directed, Graph};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::debugger_data::{CpnpCapturedData, DebuggerCpnpResponse};
 
@@ -14,7 +14,7 @@ pub type NodeIP = String;
 pub type BlockHash = String;
 pub type MessageGraph = Graph<String, u64, Directed>;
 
-#[derive(Debug, Default, Serialize, Clone)]
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 pub struct CpnpLatencyAggregationData {
     pub message_source: NodeIP,
     pub message_source_tag: String,
@@ -27,7 +27,8 @@ pub struct CpnpLatencyAggregationData {
     pub latency_since_block_publication_seconds: f64,
 }
 
-#[derive(Debug, Default, Serialize, Clone)]
+// TODO: Fix serde stuff when dumping storage!!
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 pub struct CpnpBlockPublication {
     #[serde(flatten)]
     pub node_latencies: BTreeMap<NodeIP, CpnpLatencyAggregationData>,
@@ -52,7 +53,7 @@ pub struct CpnpBlockPublicationFlattened {
     pub graph: MessageGraph,
 }
 
-#[derive(Debug, Default, Serialize, Clone)]
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 pub struct MessageGraphInfo {
     pub node_count: usize,
     pub source_node_count: usize,
@@ -158,13 +159,13 @@ pub fn aggregate_first_receive(
     let height = if !publish_messages.is_empty() {
         publish_messages[0].events[0].msg.height
     } else {
-        println!("Error: Height");
+        // println!("Error: Height");
         return Err(AggregatorError::SourceNotReady);
     };
 
     let mut message_hash_to_block_hash_map: BTreeMap<String, String> = BTreeMap::new();
 
-    println!("TAG TO BLOCK HASH: {:#?}", tag_to_block_hash_map);
+    // println!("TAG TO BLOCK HASH: {:#?}", tag_to_block_hash_map);
 
     for publish_message in publish_messages {
         // let block_hash = publish_message.events[0].hash.clone();
@@ -210,17 +211,17 @@ pub fn aggregate_first_receive(
         message_hash_to_block_hash_map.insert(publish_message.events[0].hash.clone(), block_hash);
     }
 
-    println!(
-        "MESSAGE HASH TO BLOCK HASH: {:#?}",
-        message_hash_to_block_hash_map
-    );
+    // println!(
+    //     "MESSAGE HASH TO BLOCK HASH: {:#?}",
+    //     message_hash_to_block_hash_map
+    // );
 
     for event in events.clone() {
         let block_hash =
             if let Some(block_hash) = message_hash_to_block_hash_map.get(&event.events[0].hash) {
                 block_hash.to_string()
             } else {
-                println!("Not found {}", event.events[0].hash);
+                // println!("Not found {}", event.events[0].hash);
                 // panic!();
                 continue;
             };

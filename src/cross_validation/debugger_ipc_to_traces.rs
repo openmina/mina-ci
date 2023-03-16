@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::aggregators::{BlockHash, BlockTraceAggregatorReport, CpnpBlockPublication};
 
 pub type ComparisonDeltas = BTreeMap<String, f64>;
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ValidationReport {
     // pub measured_latency_comparison: BTreeMap<String, f64>,
     pub received_time_comparison: ComparisonDeltas,
@@ -92,7 +92,7 @@ pub fn cross_validate_ipc_with_traces(
             ..Default::default()
         };
 
-        let ipc_report = ipc_reports.get(block_hash).unwrap();
+        let ipc_report = ipc_reports.get(block_hash).cloned().unwrap_or_default();
         let ipc_node_latencies = ipc_report.node_latencies.clone();
 
         report.all_nodes_present = block_traces.len() == ipc_node_latencies.len();
@@ -101,7 +101,7 @@ pub fn cross_validate_ipc_with_traces(
             let ipc_latencies = if let Some(ipc_latencies) = ipc_node_latencies.get(&trace.node) {
                 ipc_latencies
             } else {
-                println!("No ipc data for {}", trace.node);
+                // println!("No ipc data for {}", trace.node);
                 report.missing_nodes.push(trace.node.clone());
                 continue;
             };
@@ -114,11 +114,13 @@ pub fn cross_validate_ipc_with_traces(
             // let latency_difference = trace.receive_latency.unwrap() - ipc_latencies.latency_since_block_publication_seconds;
             // report.measured_latency_comparison.insert(trace.node.clone(), latency_difference);
 
-            let receive_time_difference =
-                trace.date_time.unwrap() - ((ipc_latencies.receive_time as f64) / 1_000_000.0);
-            report
-                .received_time_comparison
-                .insert(trace.node.clone(), receive_time_difference);
+            let receive_time_difference = trace
+                .date_time
+                .map(|trace_time| trace_time - ((ipc_latencies.receive_time as f64) / 1_000_000.0));
+            report.received_time_comparison.insert(
+                trace.node.clone(),
+                receive_time_difference.unwrap_or_default(),
+            );
         }
 
         by_block.insert(block_hash.clone(), report);
@@ -131,8 +133,12 @@ pub fn aggregate_cross_validations(
     cross_validations: Vec<BTreeMap<String, ValidationReport>>,
 ) -> AggregateValidationReport {
     let total_heights_checked = cross_validations.len();
-    let height_start = cross_validations.first().and_then(|first| first.first_key_value().map(|(_, v)| v.height));
-    let height_end = cross_validations.last().and_then(|first| first.first_key_value().map(|(_, v)| v.height));
+    let height_start = cross_validations
+        .first()
+        .and_then(|first| first.first_key_value().map(|(_, v)| v.height));
+    let height_end = cross_validations
+        .last()
+        .and_then(|first| first.first_key_value().map(|(_, v)| v.height));
     let reports: Vec<ValidationReport> = cross_validations
         .into_iter()
         .flat_map(|v| v.values().cloned().collect::<Vec<_>>())

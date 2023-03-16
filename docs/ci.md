@@ -47,9 +47,7 @@ Open up the [CI reports interface](http://1.k8.openmina.com:31356/140) in your i
 
 **Reports**
 
-
-![Uploading 0-ListOfReports.png…]()
-
+![0-ListOfReports](https://user-images.githubusercontent.com/60480123/225696180-167feccb-f43d-43a7-9635-7e1268b99481.png)
 
 
 This is a list of CI reports.
@@ -78,6 +76,7 @@ amount of seconds
 **Show deltas** - compares the most recent build and the previous one. It does so by changing the histograms to show deltas.
 
 
+![0-1-ListOfReportsDetail](https://user-images.githubusercontent.com/60480123/225696365-26ede229-6415-440c-a6af-7cd376e3e2a3.png)
 
 
 **Decrease the number of jobs** - the title of the commit, which describes the changes made in the build
@@ -99,6 +98,7 @@ amount of seconds
 
 #### Histograms
 
+![Histograms](https://user-images.githubusercontent.com/60480123/225696472-c43925de-d517-46d4-a7cc-7df8a268082d.png)
 
 
 There are three histogram representing the following:
@@ -112,6 +112,7 @@ Receive **Latency** - how long it took since production time the node to receive
 Histograms can be changed to show the differences between the most recent build and the previous build by clicking on the **Show deltas** button in the upper right corner of the screen:
 
 
+![Deltas](https://user-images.githubusercontent.com/60480123/225696579-8bf23127-1977-4b20-9605-764be381cb16.png)
 
 
 This displays a histogram in which you can see the difference in each value between two builds. If the value has increased, the bar will be in red and will be rising up, if it has decreased, the bar will be in green and going down.
@@ -119,6 +120,7 @@ This displays a histogram in which you can see the difference in each value betw
 Now click on a report to show more details:
 
 
+![3-Sidebar](https://user-images.githubusercontent.com/60480123/225696674-7c21e118-1378-40b9-9f72-3440bd9eeba0.png)
 
 
 On the right side of your screen, a side bar with additional Report Details will show up with the production, application and latency histograms for that build.
@@ -126,6 +128,7 @@ On the right side of your screen, a side bar with additional Report Details will
 Above the histograms, you can see the **Total** number of blocks produced with this build. Click on this to open up details of these blocks:
 
 
+![3-1-Sidebar AllBlocks](https://user-images.githubusercontent.com/60480123/225697418-443d6b50-bcee-4185-91b9-2d201770a08c.png)
 
 
 
@@ -146,6 +149,7 @@ You can click on any of the aforementioned values to sort blocks by that value.
 Click on the left-facing arrow to go back to the previous screen of the sidebar. Now click on the **Slowest Block** button to show additional information about the block with the highest latencies:
 
 
+![3-1-1-Sidebar AllBlocks Chain](https://user-images.githubusercontent.com/60480123/225696997-3d05af32-c89f-47ee-aab7-2a0aef0db8e3.png)
 
 
 
@@ -169,6 +173,7 @@ By default, this page is opened on the **Chain** tab
 
 Now click on the **Network** tab, which display all the nodes that have received this block.
 
+![3-1-2-Sidebar AllBlocks Network](https://user-images.githubusercontent.com/60480123/225697842-7eff3a0a-33b9-47ac-8ab4-19b23515f86a.png)
 
 
 **Node** - the name of the node that the block was received by

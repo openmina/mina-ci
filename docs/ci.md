@@ -45,7 +45,7 @@ With the use of the CI, we run builds of the code in a specified frequency. We c
 
 Open up the [CI reports interface](http://1.k8.openmina.com:31356/140) in your internet browser.
 
-**Reports**
+#### Reports
 
 ![0-ListOfReports](https://user-images.githubusercontent.com/60480123/225696180-167feccb-f43d-43a7-9635-7e1268b99481.png)
 
@@ -119,6 +119,7 @@ This displays a histogram in which you can see the difference in each value betw
 
 Now click on a report to show more details:
 
+#### Report Detail
 
 ![3-Sidebar](https://user-images.githubusercontent.com/60480123/225696674-7c21e118-1378-40b9-9f72-3440bd9eeba0.png)
 

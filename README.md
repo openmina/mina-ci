@@ -35,6 +35,20 @@ Notes:
 
 You can check out the configuration in the helm charts at: https://github.com/openmina/mina/blob/openmina-berkeley/helm/openmina-config/values/common.yaml
 
+## Related repositories and links
+
+### GitHub repositories
+- https://github.com/openmina/mina/tree/openmina-berkeley/helm/block-producer
+- https://github.com/openmina/mina-aggregator
+- https://github.com/openmina/mina-ci-frontend
+- https://github.com/openmina/mina-sample-zkapp
+
+### Docker environments
+- https://hub.docker.com/orgs/openmina/
+
+### Environment variables for drone
+- https://github.com/openmina/mina/blob/openmina-berkeley/.drone.yml
+
 <!-- Here is a gif that depicts the steps above: -->
 
 <!-- ![How to start a CI run](/docs/assets/create-custom-build-2.gif) -->

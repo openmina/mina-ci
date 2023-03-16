@@ -48,13 +48,13 @@ Open up the [CI reports interface](http://1.k8.openmina.com:31356/140) in your i
 **Reports**
 
 
+![Uploading 0-ListOfReports.png…]()
 
 
 
 This is a list of CI reports.
 
-
-![Uploading 1-1-FiltersDetail.png…]()
+![1-1-FiltersDetail](https://user-images.githubusercontent.com/60480123/225695997-df936d54-4ce0-4cf0-9d5d-1907f92a3dfa.png)
 
 
 At the top are filters. Click on the Filters icon to show a list of filters, and select one or multiple filters to show builds within those categories:

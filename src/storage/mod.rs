@@ -131,6 +131,9 @@ pub struct BuildSummary {
     pub application_times_previous: Vec<f64>,
     pub production_times_previous: Vec<f64>,
     pub receive_latencies_previous: Vec<f64>,
+    pub block_production_regression: bool,
+    pub block_application_regression: bool,
+    pub receive_latency_regression: bool,
     // #[serde(skip)]
     // pub avg_total_count: usize,
     // #[serde(skip)]

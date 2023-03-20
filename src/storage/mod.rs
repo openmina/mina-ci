@@ -9,13 +9,12 @@ pub use remote::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregators::{BlockHash, BlockTraceAggregatorReport, CpnpBlockPublication},
+    aggregators::{AggregatedBlockTraces, BlockHash, CpnpBlockPublication},
     cross_validation::ValidationReport,
 };
 
 pub type IpcAggregatorStorage = BTreeMap<usize, BTreeMap<BlockHash, CpnpBlockPublication>>;
-pub type BlockTraceAggregatorStorage =
-    BTreeMap<usize, BTreeMap<BlockHash, Vec<BlockTraceAggregatorReport>>>;
+pub type BlockTraceAggregatorStorage = BTreeMap<usize, AggregatedBlockTraces>;
 
 pub type CrossValidationStorage = BTreeMap<usize, BTreeMap<BlockHash, ValidationReport>>;
 

@@ -5,7 +5,7 @@ use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
 use crate::{
-    aggregators::{aggregate_block_traces, aggregate_first_receive, BlockTraceAggregatorReport},
+    aggregators::{aggregate_block_traces, aggregate_first_receive, AggregatedBlockTraces},
     config::AggregatorEnvironment,
     cross_validation::cross_validate_ipc_with_traces,
     debugger_data::{CpnpCapturedData, DebuggerCpnpResponse},
@@ -13,7 +13,7 @@ use crate::{
         collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
         get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
     },
-    storage::{AggregatorStorage, BlockSummary, PeerTiming},
+    storage::AggregatorStorage,
     AggregatorResult,
 };
 
@@ -71,103 +71,6 @@ async fn get_height_data_cpnp(
     reqwest::get(url).await?.json().await.map_err(|e| e.into())
 }
 
-// async fn get_node_list_from_cluster() -> AggregatorResult<Vec<NodeAddressCluster>> {
-//     reqwest::get(CLUSTER_NODE_LIST_URL)
-//         .await?
-//         .json()
-//         .await
-//         .map_err(|e| e.into())
-// }
-
-// pub async fn rehydrate_storage(
-//     ipc_storage: &mut IpcAggregatorStorage,
-//     block_trace_storage: &mut BlockTraceAggregatorStorage,
-//     environment: &AggregatorEnvironment,
-// ) {
-//     let mut blocks = get_most_recent_produced_blocks(environment, 10).await;
-
-//     blocks.sort_by(|a, b| a.0.cmp(&b.0));
-//     let mut highest = blocks[0].0;
-//     const MAX_HISTORY: usize = 100;
-
-//     let mut current_height_blocks: Vec<(usize, String, String)> = vec![];
-
-//     while let Some(e) = blocks.get(0) {
-//         if e.0 == highest {
-//             current_height_blocks.push(e.clone());
-//             blocks.remove(0);
-//         } else {
-//             info!("Rehydratating height: {}", highest);
-//             // aggregate here
-//             let node_infos = get_node_info_from_cluster(environment).await;
-
-//             let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
-//                 .iter()
-//                 .map(|(k, v)| {
-//                     (
-//                         v.daemon_status.addrs_and_ports.peer.peer_id.clone(),
-//                         k.to_string(),
-//                     )
-//                 })
-//                 .collect();
-
-//             let tag_to_block_hash_map: BTreeMap<String, String> = current_height_blocks
-//                 .iter()
-//                 .map(|(_, state_hash, tag)| {
-//                     // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
-//                     (tag.to_string(), state_hash.to_string())
-//                 })
-//                 .collect();
-
-//             let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> =
-//                 BTreeMap::new();
-
-//             for (_, state_hash, _) in &current_height_blocks {
-//                 info!("Collecting node traces for block {state_hash}");
-//                 let trace = get_block_trace_from_cluster(environment, state_hash).await;
-//                 info!("Traces collected for block {state_hash}");
-//                 info!("Aggregating trace data and traces for block {state_hash}");
-//                 // println!("TRACES KEYS: {:#?}", trace.keys());
-//                 match aggregate_block_traces(highest, state_hash, &node_infos, trace) {
-//                     Ok(data) => {
-//                         block_traces.insert(state_hash.clone(), data);
-//                     }
-//                     Err(e) => warn!("{}", e),
-//                 }
-//                 info!("Trace aggregation finished for block {state_hash}");
-//             }
-
-//             let _ = block_trace_storage.insert(highest, block_traces);
-
-//             // TODO: move this to a separate thread?
-//             info!("Polling debuggers for height {highest}");
-
-//             match pull_debugger_data_cpnp(Some(highest), environment, &node_infos).await {
-//                 Ok(data) => {
-//                     let (height, aggregated_data) = match aggregate_first_receive(
-//                         data,
-//                         &peer_id_to_tag_map,
-//                         &tag_to_block_hash_map,
-//                     ) {
-//                         Ok((height, aggregate_data)) => (height, aggregate_data),
-//                         Err(e) => {
-//                             warn!("{}", e);
-//                             continue;
-//                         }
-//                     };
-
-//                     // TODO: this is not a very good idea, capture the error!
-//                     let _ = ipc_storage.insert(height, aggregated_data);
-//                 }
-//                 Err(e) => error!("Error in pulling data: {}", e),
-//             }
-//             current_height_blocks.clear();
-//             highest -= 1;
-//         }
-//     }
-//     info!("Rehydratation completed!");
-// }
-
 pub async fn poll_node_traces(
     state: &AggregatorState,
     storage: &mut AggregatorStorage,
@@ -220,7 +123,8 @@ pub async fn poll_node_traces(
         }
 
         let height = blocks_on_most_recent_height[0].0;
-        let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> = BTreeMap::new();
+        // let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> = BTreeMap::new();
+        let mut block_traces = AggregatedBlockTraces::default();
 
         info!("Height: {height}");
 
@@ -307,155 +211,46 @@ pub async fn poll_node_traces(
         }
 
         // per block summaries
-        for (block_hash, block_traces_per_node) in block_traces.iter() {
-            let global_slot = block_traces_per_node
-                .iter()
-                .find_map(|t| t.global_slot.clone());
-            let tx_count = block_traces_per_node
-                .iter()
-                .find_map(|t| t.included_tranasction_count);
-            let date_time = block_traces_per_node.iter().find_map(|t| t.date_time);
-            let block_producer = block_traces_per_node
-                .iter()
-                .find_map(|t| t.block_producer.clone());
-            let block_producer_nodes = block_traces_per_node
-                .iter()
-                .filter(|t| t.is_producer)
-                .map(|t| t.node.clone())
-                .collect();
-            let max_receive_latency = block_traces_per_node
-                .iter()
-                .filter(|t| !t.is_producer)
-                .filter_map(|t| t.receive_latency)
-                .reduce(|a, b| a.max(b))
-                .unwrap_or_default();
-            let peer_timings = block_traces_per_node
-                .iter()
-                .map(|t| PeerTiming {
-                    node: t.node.clone(),
-                    block_processing_time: t.block_application,
-                    receive_latency: t.receive_latency,
-                })
-                .collect();
-            let summary = BlockSummary {
-                block_hash: block_hash.clone(),
-                global_slot,
-                tx_count,
-                date_time,
-                block_producer,
-                block_producer_nodes,
-                max_receive_latency,
-                peer_timings,
-                height,
-            };
-            build_storage
-                .block_summaries
-                .insert(block_hash.to_string(), summary);
-        }
+        build_storage.block_summaries = block_traces.block_summaries(height);
 
-        let tx_count = block_traces
-            .values()
-            .flat_map(|traces| {
-                traces
-                    .iter()
-                    .filter(|val| val.is_producer)
-                    .filter_map(|val| val.included_tranasction_count)
-                    .max()
-            })
-            .max()
-            .unwrap_or_default();
+        let tx_count = block_traces.transaction_count();
 
         build_storage
             .helpers
             .tx_count_per_height
             .insert(height, tx_count);
+        // TODO: rework!
         build_storage.build_summary.tx_count =
             build_storage.helpers.tx_count_per_height.values().sum();
 
-        let application_times: Vec<f64> = block_traces
-            .values()
-            .flat_map(|traces| {
-                traces
-                    .iter()
-                    .filter(|val| !val.is_producer)
-                    .filter_map(|val| val.block_application)
-                    .collect::<Vec<f64>>()
-            })
-            .collect();
+        let application_times: Vec<f64> = block_traces.application_times();
 
         // TODO: get from producer_traces
-        let production_times: Vec<f64> = block_traces
-            .values()
-            .flat_map(|traces| {
-                traces
-                    .iter()
-                    .filter(|val| val.is_producer)
-                    .filter_map(|val| val.block_application)
-                    .collect::<Vec<f64>>()
-            })
-            .collect();
+        let production_times: Vec<f64> = block_traces.production_times();
 
-        let receive_latencies: Vec<f64> = block_traces
-            .values()
-            .flat_map(|traces| {
-                traces
-                    .iter()
-                    .filter(|val| !val.is_producer)
-                    .filter_map(|val| val.receive_latency)
-                    .collect::<Vec<f64>>()
-            })
-            .collect();
+        let receive_latencies: Vec<f64> = block_traces.receive_latencies();
 
         let application_time_sum: f64 = application_times.iter().sum();
-        let application_min = application_times
-            .iter()
-            .copied()
-            .reduce(|a, b| a.min(b))
-            .unwrap_or(f64::MAX);
-        let application_max = application_times
-            .iter()
-            .copied()
-            .reduce(|a, b| a.max(b))
-            .unwrap_or(f64::MIN);
+        let application_min = f64_min(&application_times);
+        let application_max = f64_max(&application_times);
 
         let production_time_sum: f64 = production_times.iter().sum();
-        let production_min = production_times
-            .iter()
-            .copied()
-            .reduce(|a, b| a.min(b))
-            .unwrap_or(f64::MAX);
-        let production_max = production_times
-            .iter()
-            .copied()
-            .reduce(|a, b| a.max(b))
-            .unwrap_or(f64::MIN);
+        let production_min = f64_min(&production_times);
+        let production_max = f64_max(&production_times);
 
         let receive_latencies_sum: f64 = receive_latencies.iter().sum();
-        let receive_latencies_min = receive_latencies
-            .iter()
-            .copied()
-            .reduce(|a, b| a.min(b))
-            .unwrap_or(f64::MAX);
-        let receive_latencies_max = receive_latencies
-            .iter()
-            .copied()
-            .reduce(|a, b| a.max(b))
-            .unwrap_or(f64::MIN);
+        let receive_latencies_min = f64_min(&receive_latencies);
+        let receive_latencies_max = f64_max(&receive_latencies);
 
         let unique_block_count = blocks_on_most_recent_height
             .iter()
             .map(|(_, hash, _)| hash)
             .unique()
             .count();
-        let application_measurement_count: usize = block_traces
-            .values()
-            .map(|traces| traces.iter().filter(|t| !t.is_producer).count())
-            .sum();
-        let production_measurement_count: usize = block_traces
-            .values()
-            .map(|traces| traces.iter().filter(|t| t.is_producer).count())
-            .sum();
+        let application_measurement_count: usize = block_traces.appliaction_count();
+        let production_measurement_count: usize = block_traces.production_count();
 
+        // store the aggregated values
         build_storage
             .helpers
             .application_times
@@ -539,4 +334,20 @@ pub async fn poll_node_traces(
 
         let _ = storage.insert(build_number, build_storage);
     }
+}
+
+fn f64_min(values: &[f64]) -> f64 {
+    values
+        .iter()
+        .copied()
+        .reduce(|a, b| a.min(b))
+        .unwrap_or(f64::MAX)
+}
+
+fn f64_max(values: &[f64]) -> f64 {
+    values
+        .iter()
+        .copied()
+        .reduce(|a, b| a.max(b))
+        .unwrap_or(f64::MIN)
 }

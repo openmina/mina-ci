@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::aggregators::{BlockHash, BlockTraceAggregatorReport, CpnpBlockPublication};
+use crate::aggregators::{AggregatedBlockTraces, BlockHash, CpnpBlockPublication};
 
 pub type ComparisonDeltas = BTreeMap<String, f64>;
 
@@ -80,13 +80,14 @@ pub struct AggregateValidationReport {
 
 // TODO: unwraps
 pub fn cross_validate_ipc_with_traces(
-    traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>>,
+    traces: AggregatedBlockTraces,
     ipc_reports: BTreeMap<BlockHash, CpnpBlockPublication>,
     height: usize,
 ) -> BTreeMap<String, ValidationReport> {
     let mut by_block: BTreeMap<String, ValidationReport> = BTreeMap::new();
 
-    for (block_hash, block_traces) in traces.iter() {
+    // TODO: move this to AggregatedBlockTraces as a method?
+    for (block_hash, block_traces) in traces.inner().iter() {
         let mut report = ValidationReport {
             height,
             ..Default::default()

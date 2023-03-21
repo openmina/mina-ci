@@ -179,7 +179,7 @@ impl BuildStorage {
             self.build_summary.receive_latency_min = receive_latencies_min;
         } else {
             self.build_summary.receive_latency_min =
-                production_min.min(self.build_summary.receive_latency_min);
+                receive_latencies_min.min(self.build_summary.receive_latency_min);
         }
         self.build_summary.receive_latency_max =
             receive_latencies_max.max(self.build_summary.receive_latency_max);
@@ -398,4 +398,278 @@ fn f64_max(values: &[f64]) -> f64 {
         .copied()
         .reduce(|a, b| a.max(b))
         .unwrap_or(f64::MIN)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::BTreeMap,
+        io::BufReader,
+        sync::{Arc, RwLock},
+    };
+
+    use crate::{
+        aggregators::{AggregatedBlockTraces, BlockTraceAggregatorReport},
+        executor::state::{AggregatorState, AggregatorStateInner},
+        storage::{AggregatorStorage, BuildStorage, BuildStorageDump, LockedBTreeMap},
+    };
+
+    #[test]
+    fn test_summary_update_one_block() {
+        // create empty storage
+        let mut storage = BuildStorage::default();
+
+        // set height
+        let height = 1;
+
+        // set block hash
+        let block_hash = "Height1Block1".to_string();
+
+        // create dummy traces
+        let trace_1 = BlockTraceAggregatorReport {
+            height,
+            node: "prod1".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: true,
+            receive_latency: Some(-20.40),
+            block_application: Some(20.40),
+            included_tranasction_count: Some(128),
+            ..Default::default()
+        };
+
+        let trace_2 = BlockTraceAggregatorReport {
+            height,
+            node: "node1".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: false,
+            receive_latency: Some(1.20),
+            block_application: Some(12.40),
+            included_tranasction_count: None,
+            ..Default::default()
+        };
+
+        let trace_3 = BlockTraceAggregatorReport {
+            height,
+            node: "node2".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: false,
+            receive_latency: Some(2.20),
+            block_application: Some(8.40),
+            included_tranasction_count: None,
+            ..Default::default()
+        };
+
+        let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3];
+        let mut block_traces = AggregatedBlockTraces::default();
+
+        block_traces.insert(block_hash, raw_traces);
+
+        storage.update_summary(height, &block_traces);
+
+        // check min, max and average calculations
+
+        // production times
+        // only one block produced, should be the same
+        let expected = 20.40;
+        assert_eq!(expected, storage.build_summary.block_production_min);
+        assert_eq!(expected, storage.build_summary.block_production_max);
+        assert_eq!(expected, storage.build_summary.block_production_avg);
+
+        // aplication times
+        // min
+        let expected = 8.40;
+        assert_eq!(expected, storage.build_summary.block_application_min);
+        // max
+        // We separate application and production times, so the production time does not influence this
+        let expected = 12.40;
+        assert_eq!(expected, storage.build_summary.block_application_max);
+        // avg
+        let expected = 10.4;
+        assert_eq!(expected, storage.build_summary.block_application_avg);
+
+        // receive_latencies
+        // We ignore the latency on producer as it is negative (it is the origin of the block)
+        // min
+        let expected = 1.20;
+        assert_eq!(expected, storage.build_summary.receive_latency_min);
+        // max
+        let expected = 2.20;
+        assert_eq!(expected, storage.build_summary.receive_latency_max);
+        // avg
+        let expected = 1.7;
+        assert!(almost::equal(
+            expected,
+            storage.build_summary.receive_latency_avg
+        ));
+
+        // transaction count
+        let expected = 128;
+        assert_eq!(expected, storage.build_summary.tx_count);
+
+        // block counts
+        let expected = 1;
+        assert_eq!(expected, storage.build_summary.block_count);
+        assert_eq!(expected, storage.build_summary.cannonical_block_count);
+
+        storage.store_data(height, block_traces, Default::default(), Default::default());
+    }
+
+    #[test]
+    fn test_summary_update_multiple_blocks_one_per_height() {
+        // create empty storage
+        let mut storage = BuildStorage::default();
+
+        // height 1 block 1
+        // set height
+        let height = 1;
+
+        // set block hash
+        let block_hash = "Height1Block1".to_string();
+
+        // create dummy traces
+        let trace_1 = BlockTraceAggregatorReport {
+            height,
+            node: "prod1".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: true,
+            receive_latency: Some(-20.40),
+            block_application: Some(20.40),
+            included_tranasction_count: Some(128),
+            ..Default::default()
+        };
+
+        let trace_2 = BlockTraceAggregatorReport {
+            height,
+            node: "node1".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: false,
+            receive_latency: Some(1.20),
+            block_application: Some(12.40),
+            included_tranasction_count: None,
+            ..Default::default()
+        };
+
+        let trace_3 = BlockTraceAggregatorReport {
+            height,
+            node: "node2".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: false,
+            receive_latency: Some(2.20),
+            block_application: Some(8.40),
+            included_tranasction_count: None,
+            ..Default::default()
+        };
+
+        let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3];
+        let mut block_traces = AggregatedBlockTraces::default();
+
+        block_traces.insert(block_hash, raw_traces);
+
+        storage.update_summary(height, &block_traces);
+        storage.store_data(height, block_traces, Default::default(), Default::default());
+
+        // height 2 block 1
+        // set height
+        let height = 2;
+
+        // set block hash
+        let block_hash = "Height2Block1".to_string();
+
+        // create dummy traces
+        let trace_1 = BlockTraceAggregatorReport {
+            height,
+            node: "prod1".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: true,
+            receive_latency: Some(-21.60),
+            block_application: Some(21.60),
+            included_tranasction_count: Some(55),
+            ..Default::default()
+        };
+
+        let trace_2 = BlockTraceAggregatorReport {
+            height,
+            node: "node1".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: false,
+            receive_latency: Some(0.20),
+            block_application: Some(1.40),
+            included_tranasction_count: None,
+            ..Default::default()
+        };
+
+        let trace_3 = BlockTraceAggregatorReport {
+            height,
+            node: "node2".to_string(),
+            block_hash: block_hash.clone(),
+            is_producer: false,
+            receive_latency: Some(0.234),
+            block_application: Some(3.0),
+            included_tranasction_count: None,
+            ..Default::default()
+        };
+
+        let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3];
+        let mut block_traces = AggregatedBlockTraces::default();
+
+        block_traces.insert(block_hash, raw_traces);
+
+        storage.update_summary(height, &block_traces);
+
+        // check min, max and average calculations
+        // production times
+        // min
+        let expected = 20.40;
+        assert_eq!(expected, storage.build_summary.block_production_min);
+        // max
+        let expected = 21.60;
+        assert_eq!(expected, storage.build_summary.block_production_max);
+        // avg
+        let expected = 21.0;
+        assert!(almost::equal(
+            expected,
+            storage.build_summary.block_production_avg
+        ));
+
+        // aplication times
+        // min
+        let expected = 1.40;
+        assert_eq!(expected, storage.build_summary.block_application_min);
+        // max
+        // We separate application and production times, so the production time does not influence this
+        let expected = 12.40;
+        assert_eq!(expected, storage.build_summary.block_application_max);
+        // avg
+        let expected = 6.3;
+        assert!(almost::equal(
+            expected,
+            storage.build_summary.block_application_avg
+        ));
+
+        // receive_latencies
+        // We ignore the latency on producer as it is negative (it is the origin of the block)
+        // min
+        let expected = 0.20;
+        assert_eq!(expected, storage.build_summary.receive_latency_min);
+        // max
+        let expected = 2.20;
+        assert_eq!(expected, storage.build_summary.receive_latency_max);
+        // avg
+        let expected = 0.9585;
+        assert!(almost::equal(
+            expected,
+            storage.build_summary.receive_latency_avg
+        ));
+
+        // transaction count
+        let expected = 183;
+        assert_eq!(expected, storage.build_summary.tx_count);
+
+        // block counts
+        let expected = 2;
+        assert_eq!(expected, storage.build_summary.block_count);
+        assert_eq!(expected, storage.build_summary.cannonical_block_count);
+
+        storage.store_data(height, block_traces, Default::default(), Default::default());
+    }
 }

@@ -40,7 +40,7 @@ pub struct SnarkPoolElement {
     pub prover: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DaemonMetrics {
     pub transaction_pool_size: usize,

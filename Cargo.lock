@@ -3,6 +3,12 @@
 version = 3
 
 [[package]]
+name = "almost"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3aa2999eb46af81abb65c2d30d446778d7e613b60bbf4e174a027e80f90a3c14"
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,6 +562,7 @@ dependencies = [
 name = "mina-aggregator"
 version = "0.1.0"
 dependencies = [
+ "almost",
  "futures",
  "itertools",
  "petgraph",

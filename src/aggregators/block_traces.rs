@@ -148,7 +148,7 @@ impl AggregatedBlockTraces {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BlockTraceAggregatorReport {
     pub height: usize,
     pub block_hash: String,

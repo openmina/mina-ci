@@ -70,6 +70,22 @@ impl From<BuildStorageDump> for BuildStorage {
     }
 }
 
+impl BuildStorage {
+    pub fn store_data(
+        &mut self,
+        height: usize,
+        traces: AggregatedBlockTraces,
+        ipc_data: BTreeMap<BlockHash, CpnpBlockPublication>,
+        cross_validation_report: BTreeMap<BlockHash, ValidationReport>,
+    ) {
+        let _ = self.trace_storage.insert(height, traces);
+        let _ = self.ipc_storage.insert(height, ipc_data);
+        let _ = self
+            .cross_validation_storage
+            .insert(height, cross_validation_report);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildStorageDump {
     pub ipc_storage: IpcAggregatorStorage,

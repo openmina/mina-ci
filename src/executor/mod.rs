@@ -26,7 +26,7 @@ async fn pull_debugger_data_cpnp(
     height: Option<usize>,
     environment: &AggregatorEnvironment,
     node_infos: &BTreeMap<String, DaemonStatusDataSlim>,
-) -> AggregatorResult<Vec<DebuggerCpnpResponse>> {
+) -> Vec<DebuggerCpnpResponse> {
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
 
     let nodes = collect_all_urls(environment, ComponentType::Debugger);
@@ -49,7 +49,7 @@ async fn pull_debugger_data_cpnp(
         }
     }
 
-    Ok(collected)
+    collected
 }
 
 async fn get_height_data_cpnp(
@@ -175,40 +175,23 @@ pub async fn poll_node_traces(
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
 
-        match pull_debugger_data_cpnp(Some(height), environment, &node_infos).await {
-            Ok(data) => {
-                let (height, aggregated_data) = match aggregate_first_receive(
-                    data,
-                    &peer_id_to_tag_map,
-                    &tag_to_block_hash_map,
-                ) {
-                    Ok((height, aggregate_data)) => (height, aggregate_data),
-                    Err(e) => {
-                        warn!("{}", e);
-                        continue;
-                    }
-                };
+        let ipc_data = pull_debugger_data_cpnp(Some(height), environment, &node_infos).await;
 
-                // also do the cross_validation
-                let report = cross_validate_ipc_with_traces(
-                    block_traces.clone(),
-                    aggregated_data.clone(),
-                    height,
-                );
-                // TODO!
+        let (_, aggregated_ipc_data) =
+            match aggregate_first_receive(ipc_data, &peer_id_to_tag_map, &tag_to_block_hash_map) {
+                Ok((height, aggregate_data)) => (height, aggregate_data),
+                Err(e) => {
+                    warn!("{}", e);
+                    (height, Default::default())
+                }
+            };
 
-                let _ = build_storage
-                    .trace_storage
-                    .insert(height, block_traces.clone());
-                let _ = build_storage
-                    .ipc_storage
-                    .insert(height, aggregated_data.clone());
-                let _ = build_storage
-                    .cross_validation_storage
-                    .insert(height, report);
-            }
-            Err(e) => error!("Error in pulling data: {}", e),
-        }
+        // also do the cross_validation
+        let cross_validation_report = cross_validate_ipc_with_traces(
+            block_traces.clone(),
+            aggregated_ipc_data.clone(),
+            height,
+        );
 
         // per block summaries
         build_storage.block_summaries = block_traces.block_summaries(height);
@@ -332,6 +315,13 @@ pub async fn poll_node_traces(
         build_storage.build_summary.receive_latency_avg =
             build_storage.helpers.get_latencies_average();
 
+        // store aggregated data
+        build_storage.store_data(
+            height,
+            block_traces,
+            aggregated_ipc_data,
+            cross_validation_report,
+        );
         let _ = storage.insert(build_number, build_storage);
     }
 }

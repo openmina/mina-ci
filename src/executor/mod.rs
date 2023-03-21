@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
-use itertools::Itertools;
 use tokio::time::sleep;
-use tracing::{error, info, instrument, warn};
+use tracing::{info, instrument, warn};
 
 use crate::{
     aggregators::{aggregate_block_traces, aggregate_first_receive, AggregatedBlockTraces},
@@ -193,127 +192,7 @@ pub async fn poll_node_traces(
             height,
         );
 
-        // per block summaries
-        build_storage.block_summaries = block_traces.block_summaries(height);
-
-        let tx_count = block_traces.transaction_count();
-
-        build_storage
-            .helpers
-            .tx_count_per_height
-            .insert(height, tx_count);
-        // TODO: rework!
-        build_storage.build_summary.tx_count =
-            build_storage.helpers.tx_count_per_height.values().sum();
-
-        let application_times: Vec<f64> = block_traces.application_times();
-
-        // TODO: get from producer_traces
-        let production_times: Vec<f64> = block_traces.production_times();
-
-        let receive_latencies: Vec<f64> = block_traces.receive_latencies();
-
-        let application_time_sum: f64 = application_times.iter().sum();
-        let application_min = f64_min(&application_times);
-        let application_max = f64_max(&application_times);
-
-        let production_time_sum: f64 = production_times.iter().sum();
-        let production_min = f64_min(&production_times);
-        let production_max = f64_max(&production_times);
-
-        let receive_latencies_sum: f64 = receive_latencies.iter().sum();
-        let receive_latencies_min = f64_min(&receive_latencies);
-        let receive_latencies_max = f64_max(&receive_latencies);
-
-        let unique_block_count = blocks_on_most_recent_height
-            .iter()
-            .map(|(_, hash, _)| hash)
-            .unique()
-            .count();
-        let application_measurement_count: usize = block_traces.appliaction_count();
-        let production_measurement_count: usize = block_traces.production_count();
-
-        // store the aggregated values
-        build_storage
-            .helpers
-            .application_times
-            .insert(height, application_times);
-        build_storage
-            .helpers
-            .production_times
-            .insert(height, production_times);
-        build_storage
-            .helpers
-            .receive_latencies
-            .insert(height, receive_latencies);
-
-        build_storage
-            .helpers
-            .application_avg_total_count
-            .insert(height, application_measurement_count);
-        build_storage
-            .helpers
-            .application_total
-            .insert(height, application_time_sum);
-        build_storage
-            .helpers
-            .production_avg_total_count
-            .insert(height, production_measurement_count);
-        build_storage
-            .helpers
-            .production_total
-            .insert(height, production_time_sum);
-        // the count is same as the application ones (optimization: remove this helper map and use the application map?)
-        build_storage
-            .helpers
-            .receive_latencies_avg_total_count
-            .insert(height, application_measurement_count);
-        build_storage
-            .helpers
-            .receive_latencies_total
-            .insert(height, receive_latencies_sum);
-
-        build_storage
-            .helpers
-            .block_count_per_height
-            .insert(height, unique_block_count);
-        build_storage.build_summary.block_count =
-            build_storage.helpers.block_count_per_height.values().sum();
-        build_storage.build_summary.cannonical_block_count =
-            build_storage.helpers.application_total.len();
-
-        if build_storage.build_summary.block_application_min == 0.0 {
-            build_storage.build_summary.block_application_min = application_min;
-        } else {
-            build_storage.build_summary.block_application_min =
-                application_min.min(build_storage.build_summary.block_application_min);
-        }
-        build_storage.build_summary.block_application_max =
-            application_max.max(build_storage.build_summary.block_application_max);
-        build_storage.build_summary.block_application_avg =
-            build_storage.helpers.get_application_average();
-
-        if build_storage.build_summary.block_production_min == 0.0 {
-            build_storage.build_summary.block_production_min = production_min;
-        } else {
-            build_storage.build_summary.block_production_min =
-                production_min.min(build_storage.build_summary.block_production_min);
-        }
-        build_storage.build_summary.block_production_max =
-            production_max.max(build_storage.build_summary.block_production_max);
-        build_storage.build_summary.block_production_avg =
-            build_storage.helpers.get_production_average();
-
-        if build_storage.build_summary.receive_latency_min == 0.0 {
-            build_storage.build_summary.receive_latency_min = receive_latencies_min;
-        } else {
-            build_storage.build_summary.receive_latency_min =
-                production_min.min(build_storage.build_summary.receive_latency_min);
-        }
-        build_storage.build_summary.receive_latency_max =
-            receive_latencies_max.max(build_storage.build_summary.receive_latency_max);
-        build_storage.build_summary.receive_latency_avg =
-            build_storage.helpers.get_latencies_average();
+        build_storage.update_summary(height, &block_traces);
 
         // store aggregated data
         build_storage.store_data(
@@ -324,20 +203,4 @@ pub async fn poll_node_traces(
         );
         let _ = storage.insert(build_number, build_storage);
     }
-}
-
-fn f64_min(values: &[f64]) -> f64 {
-    values
-        .iter()
-        .copied()
-        .reduce(|a, b| a.min(b))
-        .unwrap_or(f64::MAX)
-}
-
-fn f64_max(values: &[f64]) -> f64 {
-    values
-        .iter()
-        .copied()
-        .reduce(|a, b| a.max(b))
-        .unwrap_or(f64::MIN)
 }

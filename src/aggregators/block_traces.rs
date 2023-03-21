@@ -12,6 +12,7 @@ type BlockHash = String;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct AggregatedBlockTraces {
+    #[serde(flatten)]
     inner: BTreeMap<String, Vec<BlockTraceAggregatorReport>>,
 }
 
@@ -141,6 +142,10 @@ impl AggregatedBlockTraces {
             .map(|traces| traces.iter().filter(|t| t.is_producer).count())
             .sum()
     }
+
+    pub fn unique_block_count(&self) -> usize {
+        self.inner.values().count()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -240,3 +245,69 @@ pub fn aggregate_block_traces(
         .collect();
     Ok(report)
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use std::{
+//         collections::BTreeMap,
+//         io::BufReader,
+//         sync::{Arc, RwLock},
+//     };
+
+//     use crate::{
+//         aggregators::AggregatedBlockTraces,
+//         executor::state::{AggregatorState, AggregatorStateInner},
+//         storage::{AggregatorStorage, BuildStorage, BuildStorageDump, LockedBTreeMap},
+//     };
+
+//     fn load_storage() -> (AggregatorState, AggregatorStorage) {
+//         let file = std::fs::File::open("test-storage-170.json").unwrap();
+//         let reader = BufReader::new(file);
+
+//         match serde_json::from_reader::<_, BTreeMap<usize, BuildStorageDump>>(reader) {
+//             Ok(storage) => {
+//                 // println!("{:#?}", storage);
+//                 let storage = storage
+//                     .iter()
+//                     .map(|(k, v)| (*k, v.clone().into()))
+//                     .collect::<BTreeMap<usize, BuildStorage>>();
+//                 // println!("{:#?}", storage);
+//                 let state_inner = AggregatorStateInner {
+//                     build_number: storage
+//                         .last_key_value()
+//                         .map(|(k, _)| *k)
+//                         .unwrap_or_default(),
+//                     ..Default::default()
+//                 };
+//                 let state = Arc::new(RwLock::new(state_inner));
+//                 (state, LockedBTreeMap::new(storage))
+//             }
+//             Err(_) => (AggregatorState::default(), LockedBTreeMap::default()),
+//         }
+//     }
+
+//     // fn simple_storage() -> AggregatedBlockTraces {
+//     //     let trace_storage = BTreeMap::<usize, AggregatedBlockTraces>::new();
+
+//     // }
+
+//     #[test]
+//     fn test_applciation_time_aggregations() {
+//         // let (_, storage) = load_storage();
+//         // let build_storage = storage.get(170).unwrap().unwrap();
+
+//         let build_storage = BuildStorage::default();
+
+//         // max
+//         let expected = 47.741026878356934;
+//         let reported_max = build_storage.build_summary.block_application_max;
+//         assert_eq!(expected, reported_max);
+
+//         // min
+//         let expected = 0.024409055709838867;
+//         let reported_min = build_storage.build_summary.block_application_min;
+//         assert_eq!(expected, reported_min);
+
+//         println!("Avg: {}", build_storage.build_summary.block_application_avg)
+//     }
+// }

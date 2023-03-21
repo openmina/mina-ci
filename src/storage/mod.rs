@@ -84,6 +84,107 @@ impl BuildStorage {
             .cross_validation_storage
             .insert(height, cross_validation_report);
     }
+
+    pub fn update_summary(&mut self, height: usize, block_traces: &AggregatedBlockTraces) {
+        // per block summaries
+        self.block_summaries = block_traces.block_summaries(height);
+
+        let tx_count = block_traces.transaction_count();
+
+        self.helpers.tx_count_per_height.insert(height, tx_count);
+        // TODO: rework!
+        self.build_summary.tx_count = self.helpers.tx_count_per_height.values().sum();
+
+        let application_times: Vec<f64> = block_traces.application_times();
+
+        // TODO: get from producer_traces
+        let production_times: Vec<f64> = block_traces.production_times();
+
+        let receive_latencies: Vec<f64> = block_traces.receive_latencies();
+
+        let application_time_sum: f64 = application_times.iter().sum();
+        let application_min = f64_min(&application_times);
+        let application_max = f64_max(&application_times);
+
+        let production_time_sum: f64 = production_times.iter().sum();
+        let production_min = f64_min(&production_times);
+        let production_max = f64_max(&production_times);
+
+        let receive_latencies_sum: f64 = receive_latencies.iter().sum();
+        let receive_latencies_min = f64_min(&receive_latencies);
+        let receive_latencies_max = f64_max(&receive_latencies);
+
+        let unique_block_count = block_traces.unique_block_count();
+        let application_measurement_count: usize = block_traces.appliaction_count();
+        let production_measurement_count: usize = block_traces.production_count();
+
+        // store the aggregated values
+        self.helpers
+            .application_times
+            .insert(height, application_times);
+        self.helpers
+            .production_times
+            .insert(height, production_times);
+        self.helpers
+            .receive_latencies
+            .insert(height, receive_latencies);
+
+        self.helpers
+            .application_avg_total_count
+            .insert(height, application_measurement_count);
+        self.helpers
+            .application_total
+            .insert(height, application_time_sum);
+        self.helpers
+            .production_avg_total_count
+            .insert(height, production_measurement_count);
+        self.helpers
+            .production_total
+            .insert(height, production_time_sum);
+        // the count is same as the application ones (optimization: remove this helper map and use the application map?)
+        self.helpers
+            .receive_latencies_avg_total_count
+            .insert(height, application_measurement_count);
+        self.helpers
+            .receive_latencies_total
+            .insert(height, receive_latencies_sum);
+
+        self.helpers
+            .block_count_per_height
+            .insert(height, unique_block_count);
+        self.build_summary.block_count = self.helpers.block_count_per_height.values().sum();
+        self.build_summary.cannonical_block_count = self.helpers.application_total.len();
+
+        if self.build_summary.block_application_min == 0.0 {
+            self.build_summary.block_application_min = application_min;
+        } else {
+            self.build_summary.block_application_min =
+                application_min.min(self.build_summary.block_application_min);
+        }
+        self.build_summary.block_application_max =
+            application_max.max(self.build_summary.block_application_max);
+        self.build_summary.block_application_avg = self.helpers.get_application_average();
+
+        if self.build_summary.block_production_min == 0.0 {
+            self.build_summary.block_production_min = production_min;
+        } else {
+            self.build_summary.block_production_min =
+                production_min.min(self.build_summary.block_production_min);
+        }
+        self.build_summary.block_production_max =
+            production_max.max(self.build_summary.block_production_max);
+        self.build_summary.block_production_avg = self.helpers.get_production_average();
+
+        if self.build_summary.receive_latency_min == 0.0 {
+            self.build_summary.receive_latency_min = receive_latencies_min;
+        } else {
+            self.build_summary.receive_latency_min =
+                production_min.min(self.build_summary.receive_latency_min);
+        }
+        self.build_summary.receive_latency_max =
+            receive_latencies_max.max(self.build_summary.receive_latency_max);
+        self.build_summary.receive_latency_avg = self.helpers.get_latencies_average();
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,4 +382,20 @@ impl Default for BuildStorage {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn f64_min(values: &[f64]) -> f64 {
+    values
+        .iter()
+        .copied()
+        .reduce(|a, b| a.min(b))
+        .unwrap_or(f64::MAX)
+}
+
+fn f64_max(values: &[f64]) -> f64 {
+    values
+        .iter()
+        .copied()
+        .reduce(|a, b| a.max(b))
+        .unwrap_or(f64::MIN)
 }

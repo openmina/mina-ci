@@ -22,6 +22,7 @@ const SNARKER_NODE_COMPONENT: &str = "snarker";
 
 const DEBUGGER_COMPONENT: &str = "bpf-debugger";
 const GRAPHQL_COMPONENT: &str = "graphql";
+const INTERNAL_TRACING_COMPONENT: &str = "internal-trace/graphql";
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GraphqlResponse<T> {
@@ -31,6 +32,7 @@ pub struct GraphqlResponse<T> {
 pub enum ComponentType {
     Graphql,
     Debugger,
+    InternalTracing,
 }
 
 /// <tag, URL>
@@ -60,6 +62,7 @@ pub fn collect_all_urls(
     let component = match component_type {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
     };
 
     for seed_index in 1..=environment.seed_node_count {
@@ -110,6 +113,7 @@ fn collect_producer_urls(environment: &AggregatorEnvironment, component: &Compon
     let component = match component {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
     };
 
     let cluster_base_url = environment.cluster_base_url.to_string();

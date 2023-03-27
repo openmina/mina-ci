@@ -27,7 +27,7 @@ pub struct BlockTraces {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockTrace {
     source: TraceSource,
-    blockchain_length_int: usize,
+    blockchain_length: usize,
     state_hash: String,
     status: TraceStatus,
     total_time: f64,
@@ -66,7 +66,7 @@ async fn query_producer_internal_blocks(
 
     let most_recent_height = if !traces.is_empty() {
         // traces[0].blockchain_length.clone()
-        traces[0].blockchain_length_int
+        traces[0].blockchain_length
     } else {
         return Ok(vec![]);
     };
@@ -74,16 +74,10 @@ async fn query_producer_internal_blocks(
     let produced_blocks: Vec<(usize, String, String)> = traces
         .into_iter()
         .filter(|trace| {
-            trace.blockchain_length_int == most_recent_height
+            trace.blockchain_length == most_recent_height
                 && matches!(trace.source, TraceSource::Internal)
         })
-        .map(|trace| {
-            (
-                trace.blockchain_length_int,
-                trace.state_hash,
-                tag.to_string(),
-            )
-        })
+        .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
         .collect();
 
     Ok(produced_blocks)
@@ -95,7 +89,7 @@ pub async fn get_most_recent_produced_blocks(
 ) -> Vec<(usize, String, String)> {
     let client = reqwest::Client::new();
 
-    let nodes = collect_producer_urls(environment, &ComponentType::Graphql);
+    let nodes = collect_producer_urls(environment, &ComponentType::InternalTracing);
     let bodies = stream::iter(nodes)
         .map(|(tag, url)| {
             let client = client.clone();

@@ -87,7 +87,8 @@ impl BuildStorage {
 
     pub fn update_summary(&mut self, height: usize, block_traces: &AggregatedBlockTraces) {
         // per block summaries
-        self.block_summaries.extend(block_traces.block_summaries(height));
+        self.block_summaries
+            .extend(block_traces.block_summaries(height));
 
         let tx_count = block_traces.transaction_count();
 

@@ -22,7 +22,7 @@ pub struct BlockStructuredTraceData {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockStructuredTrace {
     pub source: TraceSource,
-    pub blockchain_length_int: i64,
+    pub blockchain_length: i64,
     // pub global_slot: String,
     pub status: TraceStatus,
     pub total_time: f64,
@@ -87,7 +87,7 @@ pub async fn get_block_trace_from_cluster(
 ) -> BTreeMap<String, BlockStructuredTrace> {
     let client = reqwest::Client::new();
 
-    let nodes = collect_all_urls(environment, ComponentType::Graphql);
+    let nodes = collect_all_urls(environment, ComponentType::InternalTracing);
     let bodies = stream::iter(nodes)
         .map(|(tag, url)| {
             let client = client.clone();

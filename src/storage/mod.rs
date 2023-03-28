@@ -186,6 +186,71 @@ impl BuildStorage {
             receive_latencies_max.max(self.build_summary.receive_latency_max);
         self.build_summary.receive_latency_avg = self.helpers.get_latencies_average();
     }
+
+    pub fn calculate_deltas(&mut self, other: &Self) {
+        self.build_summary.block_application_avg_delta =
+            other.build_summary.block_application_avg - self.build_summary.block_application_avg;
+        self.build_summary.block_application_max_delta =
+            other.build_summary.block_application_max - self.build_summary.block_application_max;
+        self.build_summary.block_application_min_delta =
+            other.build_summary.block_application_min - self.build_summary.block_application_min;
+        self.build_summary.block_application_regression = self
+            .build_summary
+            .block_application_max_delta
+            .is_sign_positive();
+
+        self.build_summary.block_production_avg_delta =
+            other.build_summary.block_production_avg - self.build_summary.block_production_avg;
+        self.build_summary.block_production_max_delta =
+            other.build_summary.block_production_max - self.build_summary.block_production_max;
+        self.build_summary.block_production_min_delta =
+            other.build_summary.block_production_min - self.build_summary.block_production_min;
+        self.build_summary.block_production_regression = self
+            .build_summary
+            .block_production_max_delta
+            .is_sign_positive();
+
+        self.build_summary.receive_latency_avg_delta =
+            other.build_summary.receive_latency_avg - self.build_summary.receive_latency_avg;
+        self.build_summary.receive_latency_max_delta =
+            other.build_summary.receive_latency_max - self.build_summary.receive_latency_max;
+        self.build_summary.receive_latency_min_delta =
+            other.build_summary.receive_latency_min - self.build_summary.receive_latency_min;
+        self.build_summary.receive_latency_regression = self
+            .build_summary
+            .receive_latency_max_delta
+            .is_sign_positive();
+
+        self.build_summary.application_times_previous =
+            other.build_summary.application_times.clone();
+        self.build_summary.production_times_previous = other.build_summary.production_times.clone();
+        self.build_summary.receive_latencies_previous =
+            other.build_summary.receive_latencies.clone();
+    }
+
+    pub fn include_times(&mut self) {
+        self.build_summary.application_times = self
+            .helpers
+            .application_times
+            .values()
+            .flatten()
+            .cloned()
+            .collect();
+        self.build_summary.production_times = self
+            .helpers
+            .production_times
+            .values()
+            .flatten()
+            .cloned()
+            .collect();
+        self.build_summary.receive_latencies = self
+            .helpers
+            .receive_latencies
+            .values()
+            .flatten()
+            .cloned()
+            .collect();
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

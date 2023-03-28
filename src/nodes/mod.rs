@@ -77,7 +77,7 @@ pub fn collect_all_urls(
 
     // snarker nodes
     for snarker_index in 1..=environment.snarker_node_count {
-        let snarker_label = format!("{}{}", SNARKER_NODE_COMPONENT, snarker_index);
+        let snarker_label = format!("{}{snarker_index:0>3}", SNARKER_NODE_COMPONENT);
         let url = format!("{}/{}/{}", cluster_base_url, snarker_label, component);
         res.insert(snarker_label, url);
     }

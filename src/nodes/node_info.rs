@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 
 use futures::{stream, StreamExt};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument, warn};
 
 use crate::{
     config::AggregatorEnvironment,
+    error::AggregatorError,
     nodes::{collect_all_urls, ComponentType},
     AggregatorResult,
 };
@@ -73,7 +75,7 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
     }
 }
 
-#[instrument]
+#[instrument(skip(environment))]
 /// Fires requests to all the nodes and collects their IPs (requests are parallel)
 pub async fn get_node_info_from_cluster(
     environment: &AggregatorEnvironment,
@@ -112,10 +114,14 @@ pub async fn get_node_info_from_cluster(
 }
 
 async fn query_node_info(client: reqwest::Client, url: &str) -> AggregatorResult<DaemonStatusData> {
-    let res: GraphqlResponse<DaemonStatusData> =
-        query_node(client, url, NODE_INFO_PAYLOAD.to_string())
-            .await?
-            .json()
-            .await?;
-    Ok(res.data)
+    let res = query_node(client, url, NODE_INFO_PAYLOAD.to_string()).await?;
+    let status = res.status();
+
+    if status != StatusCode::OK {
+        return Err(AggregatorError::RpcServerError { status });
+    }
+
+    let res_json: GraphqlResponse<DaemonStatusData> = res.json().await?;
+
+    Ok(res_json.data)
 }

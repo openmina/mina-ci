@@ -1,9 +1,11 @@
 use futures::{stream, StreamExt};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     config::AggregatorEnvironment,
+    error::AggregatorError,
     nodes::{collect_producer_urls, ComponentType},
     AggregatorResult,
 };
@@ -49,19 +51,29 @@ pub enum TraceStatus {
     Pending,
 }
 
+#[instrument(skip(client, tag))]
 async fn query_producer_internal_blocks(
     client: reqwest::Client,
     url: &str,
     tag: &str,
     // block_count: usize,
 ) -> AggregatorResult<Vec<(usize, String, String)>> {
-    let res: GraphqlResponse<BlockTracesData> = query_node(client, url, TRACES_PAYLOAD.to_string())
-        .await?
-        .json()
-        .await?;
+    // let res: GraphqlResponse<BlockTracesData> = query_node(client, url, TRACES_PAYLOAD.to_string())
+    //     .await?
+    //     .json()
+    //     .await?;
+
+    let res = query_node(client, url, TRACES_PAYLOAD.to_string()).await?;
+    let status = res.status();
+
+    if status != StatusCode::OK {
+        return Err(AggregatorError::RpcServerError { status });
+    }
+
+    let res_json: GraphqlResponse<BlockTracesData> = res.json().await?;
 
     // the traces are sorted by height in asc order, reverse to get the most recent ones on the top
-    let mut traces = res.data.block_traces.traces;
+    let mut traces = res_json.data.block_traces.traces;
     traces.reverse();
 
     let most_recent_height = if !traces.is_empty() {
@@ -75,7 +87,8 @@ async fn query_producer_internal_blocks(
         .into_iter()
         .filter(|trace| {
             trace.blockchain_length == most_recent_height
-                && matches!(trace.source, TraceSource::Internal)
+                && (matches!(trace.source, TraceSource::Internal)
+                    || matches!(trace.source, TraceSource::Unknown))
         })
         .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
         .collect();

@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
 use futures::{stream, StreamExt};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
-use crate::{config::AggregatorEnvironment, AggregatorResult};
+use crate::{config::AggregatorEnvironment, error::AggregatorError, AggregatorResult};
 
 use super::{
     collect_all_urls, query_node, ComponentType, GraphqlResponse, TraceSource, TraceStatus,
@@ -66,14 +67,20 @@ async fn query_block_traces(
     //     .await?;
 
     // hack until we remove duplicate fields from the trace response
-    let response = query_node(
+    let res = query_node(
         client,
         url,
         STRUCTURED_TRACE_PAYLOAD.replace("{STATE_HASH}", state_hash),
     )
-    .await?
-    .text()
     .await?;
+
+    let status = res.status();
+
+    if status != StatusCode::OK {
+        return Err(AggregatorError::RpcServerError { status });
+    }
+
+    let response = res.text().await?;
 
     let raw: serde_json::Value = serde_json::from_str(&response)?;
     let res: GraphqlResponse<BlockStructuredTraceData> = serde_json::from_value(raw)?;

@@ -29,6 +29,16 @@ pub struct AggregatorEnvironment {
     pub remote_storage_path: String,
 }
 
+impl AggregatorEnvironment {
+    pub fn total_node_count(&self) -> usize {
+        self.seed_node_count
+            + self.plain_node_count
+            + self.producer_node_count
+            + self.snarker_node_count
+            + self.transaction_generator_node_count
+    }
+}
+
 pub fn set_environment() -> AggregatorEnvironment {
     let plain_node_count = env::var("PLAIN_NODE_COUNT")
         .expect("PLAIN_NODE_COUNT environment var must be set!")

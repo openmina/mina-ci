@@ -14,6 +14,9 @@ pub use producer_traces::*;
 pub mod node_block_traces;
 pub use node_block_traces::*;
 
+pub mod best_chain;
+pub use best_chain::*;
+
 const PLAIN_NODE_COMPONENT: &str = "node";
 const SEED_NODE_COMPONENT: &str = "seed";
 const PRODUCER_NODE_COMPONENT: &str = "prod";
@@ -107,6 +110,18 @@ pub fn collect_all_urls(
     }
 
     res
+}
+
+pub fn get_seed_url(environment: &AggregatorEnvironment, component_type: &ComponentType) -> String {
+    let component = match component_type {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    };
+
+    let cluster_base_url = environment.cluster_base_url.to_string();
+    let seed_label = format!("{}{}", SEED_NODE_COMPONENT, 1);
+    format!("{}/{}/{}", cluster_base_url, seed_label, component)
 }
 
 fn collect_producer_urls(environment: &AggregatorEnvironment, component: &ComponentType) -> Nodes {

@@ -40,6 +40,8 @@ pub struct BuildStorage {
     pub helpers: BuildSummaryHelpers,
     #[serde(skip)]
     pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
+    #[serde(skip)]
+    pub best_chain: Vec<BlockHash>,
 }
 
 impl From<BuildStorage> for BuildStorageDump {
@@ -52,6 +54,7 @@ impl From<BuildStorage> for BuildStorageDump {
             build_summary: value.build_summary,
             block_summaries: value.block_summaries,
             helpers: value.helpers,
+            best_chain: value.best_chain,
         }
     }
 }
@@ -66,6 +69,7 @@ impl From<BuildStorageDump> for BuildStorage {
             build_summary: value.build_summary,
             block_summaries: value.block_summaries,
             helpers: value.helpers,
+            best_chain: value.best_chain,
         }
     }
 }
@@ -90,11 +94,17 @@ impl BuildStorage {
         self.block_summaries
             .extend(block_traces.block_summaries(height));
 
-        let tx_count = block_traces.transaction_count();
+        for (block_hash, tx_count) in block_traces.transaction_count_per_block() {
+            self.helpers.tx_count_per_block.insert(block_hash, tx_count);
+        }
 
-        self.helpers.tx_count_per_height.insert(height, tx_count);
-        // TODO: rework!
-        self.build_summary.tx_count = self.helpers.tx_count_per_height.values().sum();
+        self.build_summary.tx_count = self
+            .helpers
+            .tx_count_per_block
+            .iter()
+            .filter(|(k, _)| self.best_chain.contains(k))
+            .map(|(_, v)| v)
+            .sum();
 
         let application_times: Vec<f64> = block_traces.application_times();
 
@@ -262,6 +272,7 @@ pub struct BuildStorageDump {
     pub build_summary: BuildSummary,
     pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
     pub helpers: BuildSummaryHelpers,
+    pub best_chain: Vec<BlockHash>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -347,8 +358,8 @@ pub struct BuildSummaryHelpers {
     pub block_count_per_height: BTreeMap<BlockHeight, usize>,
     pub receive_latencies: BTreeMap<BlockHeight, Vec<f64>>,
 
-    /// tx counts at each height
-    pub tx_count_per_height: BTreeMap<BlockHeight, usize>,
+    /// tx counts at each block
+    pub tx_count_per_block: BTreeMap<BlockHash, usize>,
 }
 
 impl BuildSummaryHelpers {
@@ -428,6 +439,7 @@ impl BuildStorage {
             build_summary: Default::default(),
             block_summaries: Default::default(),
             helpers: Default::default(),
+            best_chain: Default::default(),
         }
     }
 
@@ -522,6 +534,8 @@ mod tests {
         let mut block_traces = AggregatedBlockTraces::default();
 
         block_traces.insert(block_hash, raw_traces);
+
+        storage.best_chain = vec!["Height1Block1".to_string()];
 
         storage.update_summary(height, &block_traces);
 
@@ -668,6 +682,8 @@ mod tests {
             ..Default::default()
         };
 
+        storage.best_chain = vec!["Height1Block1".to_string(), "Height2Block1".to_string()];
+
         let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3];
         let mut block_traces = AggregatedBlockTraces::default();
 
@@ -812,7 +828,7 @@ mod tests {
             is_producer: true,
             receive_latency: Some(-21.60),
             block_application: Some(21.60),
-            included_tranasction_count: Some(55),
+            included_tranasction_count: Some(120),
             ..Default::default()
         };
 
@@ -905,6 +921,9 @@ mod tests {
 
         let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3, trace_4];
         block_traces.insert(block_hash, raw_traces);
+
+        storage.best_chain = vec!["Height1Block1".to_string(), "Height2Block2".to_string()];
+
         storage.update_summary(height, &block_traces);
 
         // check min, max and average calculations

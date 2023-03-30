@@ -31,9 +31,6 @@ async fn main() {
         &environment.remote_storage_path,
     );
 
-    // let aggregator_storage = LockedBTreeMap::new();
-    // let (state, aggregator_storage) = load_storage("storage.json");
-    // let (state, aggregator_storage) = load_storage_remote();
     let (state, aggregator_storage) = remote_storage.load_storage();
 
     let mut t_aggregator_storage = aggregator_storage.clone();

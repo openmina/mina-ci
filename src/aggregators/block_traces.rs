@@ -90,6 +90,24 @@ impl AggregatedBlockTraces {
             .unwrap_or_default()
     }
 
+    pub fn transaction_count_per_block(&self) -> Vec<(BlockHash, usize)> {
+        self.inner
+            .values()
+            .flat_map(|traces| {
+                traces
+                    .iter()
+                    .filter(|val| val.is_producer && val.included_tranasction_count.is_some())
+                    .map(|val| {
+                        (
+                            val.block_hash.to_string(),
+                            val.included_tranasction_count.unwrap_or_default(),
+                        )
+                    })
+                // .filter_map(|val| (val.block_hash, val.included_tranasction_count))
+            })
+            .collect()
+    }
+
     pub fn application_times(&self) -> Vec<f64> {
         self.inner
             .values()

@@ -9,8 +9,9 @@ use crate::{
     cross_validation::cross_validate_ipc_with_traces,
     debugger_data::{CpnpCapturedData, DebuggerCpnpResponse},
     nodes::{
-        collect_all_urls, get_block_trace_from_cluster, get_most_recent_produced_blocks,
-        get_node_info_from_cluster, ComponentType, DaemonStatusDataSlim,
+        collect_all_urls, get_best_chain, get_block_trace_from_cluster,
+        get_most_recent_produced_blocks, get_node_info_from_cluster, get_seed_url, ComponentType,
+        DaemonStatusDataSlim,
     },
     storage::AggregatorStorage,
     AggregatorResult,
@@ -191,6 +192,18 @@ pub async fn poll_node_traces(
             aggregated_ipc_data.clone(),
             height,
         );
+
+        info!("Updating best chain");
+        match get_best_chain(&get_seed_url(environment, &ComponentType::Graphql)).await {
+            Ok(best_chain) => {
+                best_chain.into_iter().for_each(|best_chain_block| {
+                    build_storage.best_chain.push(best_chain_block.state_hash);
+                });
+            }
+            Err(e) => {
+                warn!("{e}")
+            }
+        }
 
         build_storage.update_summary(height, &block_traces);
 

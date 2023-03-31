@@ -21,11 +21,11 @@ use self::state::AggregatorState;
 
 pub mod state;
 
-#[instrument]
+#[instrument(skip(environment, _node_infos))]
 async fn pull_debugger_data_cpnp(
     height: Option<usize>,
     environment: &AggregatorEnvironment,
-    node_infos: &BTreeMap<String, DaemonStatusDataSlim>,
+    _node_infos: &BTreeMap<String, DaemonStatusDataSlim>,
 ) -> Vec<DebuggerCpnpResponse> {
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
 

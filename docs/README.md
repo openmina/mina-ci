@@ -1,7 +1,14 @@
 
 # **How we utilize CI in improving the performance of the Mina network**
 
-  
+# Table of Contents
+1. [Introduction](#Introduction)
+2. [CI-assisted testing and optimization](#CI-assisted-testing-and-optimization)
+3. [Analyzing the data](#Analyzing-the-data)
+4. [The front end](#The-Front-End)
+
+
+## Introduction
 
 Blockchains are highly secure networks, but their performance leaves much to be desired — they are not currently able to process enough transactions per second (which is also known as their _throughput_) to become widely adopted by the general public. If we want to achieve this widespread adoption, we need to _optimize_ blockchains for better performance.
 

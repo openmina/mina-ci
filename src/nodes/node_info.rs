@@ -5,14 +5,9 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument, warn};
 
-use crate::{
-    config::AggregatorEnvironment,
-    error::AggregatorError,
-    nodes::{collect_all_urls, ComponentType},
-    AggregatorResult,
-};
+use crate::{error::AggregatorError, AggregatorResult};
 
-use super::{query_node, GraphqlResponse};
+use super::{query_node, GraphqlResponse, Nodes};
 
 const NODE_INFO_PAYLOAD: &str = r#"{"query": "{ daemonStatus { addrsAndPorts { externalIp, peer { peerId } } syncStatus metrics { transactionPoolSize transactionsAddedToPool transactionPoolDiffReceived transactionPoolDiffBroadcasted } } snarkPool { prover } }" }"#;
 
@@ -75,16 +70,12 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
     }
 }
 
-#[instrument(skip(environment))]
+#[instrument(skip(nodes))]
 /// Fires requests to all the nodes and collects their IPs (requests are parallel)
-pub async fn get_node_info_from_cluster(
-    environment: &AggregatorEnvironment,
-) -> BTreeMap<String, DaemonStatusDataSlim> {
+pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, DaemonStatusDataSlim> {
     let client = reqwest::Client::new();
 
-    let urls = collect_all_urls(environment, ComponentType::Graphql);
-    // println!("URLS: {:#?}", urls);
-    let bodies = stream::iter(urls)
+    let bodies = stream::iter(nodes)
         .map(|(tag, url)| {
             let client = client.clone();
             tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })

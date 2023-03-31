@@ -27,6 +27,8 @@ const DEBUGGER_COMPONENT: &str = "bpf-debugger";
 const GRAPHQL_COMPONENT: &str = "graphql";
 const INTERNAL_TRACING_COMPONENT: &str = "internal-trace/graphql";
 
+pub type BuildNodes = BTreeMap<String, DaemonStatusDataSlim>;
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GraphqlResponse<T> {
     pub data: T,
@@ -75,7 +77,7 @@ pub fn collect_all_urls(
     }
 
     // producer nodes
-    let producers = collect_producer_urls(environment, &component_type);
+    let producers = collect_producer_urls(environment, component_type);
     res.extend(producers);
 
     // snarker nodes
@@ -112,7 +114,7 @@ pub fn collect_all_urls(
     res
 }
 
-pub fn get_seed_url(environment: &AggregatorEnvironment, component_type: &ComponentType) -> String {
+pub fn get_seed_url(environment: &AggregatorEnvironment, component_type: ComponentType) -> String {
     let component = match component_type {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
@@ -124,7 +126,10 @@ pub fn get_seed_url(environment: &AggregatorEnvironment, component_type: &Compon
     format!("{}/{}/{}", cluster_base_url, seed_label, component)
 }
 
-fn collect_producer_urls(environment: &AggregatorEnvironment, component: &ComponentType) -> Nodes {
+pub fn collect_producer_urls(
+    environment: &AggregatorEnvironment,
+    component: ComponentType,
+) -> Nodes {
     let component = match component {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
@@ -142,4 +147,70 @@ fn collect_producer_urls(environment: &AggregatorEnvironment, component: &Compon
         res.insert(producer_label, url);
     }
     res
+}
+
+pub fn collect_producer_urls_cluster_ip(
+    build_nodes: &BuildNodes,
+    component: ComponentType,
+) -> Nodes {
+    let component = match component {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    };
+
+    build_nodes
+        .iter()
+        .filter(|(tag, _)| tag.contains("prod"))
+        .map(|(tag, data)| {
+            // TODO: get the port form the environmnet(inlcude in chart?)
+            let url = format!(
+                "http://{}:3085/{}",
+                data.daemon_status.addrs_and_ports.external_ip, component
+            );
+            (tag.clone(), url)
+        })
+        .collect()
+}
+
+pub fn get_seed_url_cluster_ip(build_nodes: &BuildNodes, component_type: ComponentType) -> String {
+    let component = match component_type {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    };
+
+    build_nodes
+        .iter()
+        .find(|(tag, _)| tag.contains("seed1"))
+        .map(|(_, data)| {
+            format!(
+                "http://{}:3085/{}",
+                data.daemon_status.addrs_and_ports.external_ip, component
+            )
+        })
+        .unwrap_or_default()
+}
+
+pub fn collect_all_urls_cluster_ip(
+    build_nodes: &BuildNodes,
+    component_type: ComponentType,
+) -> Nodes {
+    let component = match component_type {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    };
+
+    build_nodes
+        .iter()
+        .map(|(tag, data)| {
+            // TODO: get the port form the environmnet(inlcude in chart?)
+            let url = format!(
+                "http://{}:3085/{}",
+                data.daemon_status.addrs_and_ports.external_ip, component
+            );
+            (tag.clone(), url)
+        })
+        .collect()
 }

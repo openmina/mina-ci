@@ -8,10 +8,12 @@ use crate::{
     config::AggregatorEnvironment,
     cross_validation::cross_validate_ipc_with_traces,
     debugger_data::{CpnpCapturedData, DebuggerCpnpResponse},
+    executor::state::AggregatorStateInner,
     nodes::{
-        collect_all_urls, get_best_chain, get_block_trace_from_cluster,
-        get_most_recent_produced_blocks, get_node_info_from_cluster, get_seed_url, ComponentType,
-        DaemonStatusDataSlim,
+        collect_all_urls, collect_all_urls_cluster_ip, collect_producer_urls,
+        collect_producer_urls_cluster_ip, get_best_chain, get_block_trace_from_cluster,
+        get_most_recent_produced_blocks, get_node_info_from_cluster, get_seed_url,
+        get_seed_url_cluster_ip, ComponentType, Nodes,
     },
     storage::AggregatorStorage,
     AggregatorResult,
@@ -21,15 +23,13 @@ use self::state::AggregatorState;
 
 pub mod state;
 
-#[instrument(skip(environment, _node_infos))]
+#[instrument(skip(environment, nodes))]
 async fn pull_debugger_data_cpnp(
     height: Option<usize>,
     environment: &AggregatorEnvironment,
-    _node_infos: &BTreeMap<String, DaemonStatusDataSlim>,
+    nodes: Nodes,
 ) -> Vec<DebuggerCpnpResponse> {
     let mut collected: Vec<DebuggerCpnpResponse> = vec![];
-
-    let nodes = collect_all_urls(environment, ComponentType::Debugger);
 
     for (tag, url) in nodes.iter() {
         // info!("Pulling {}", url);
@@ -80,19 +80,23 @@ pub async fn poll_node_traces(
         info!("Sleeping");
         sleep(environment.data_pull_interval).await;
 
-        let build_number = if let Ok(read_state) = state.read() {
-            if !read_state.enable_aggregation {
-                info!(
-                    "Build {} locked, waiting for testnet start",
-                    read_state.build_number
-                );
-                continue;
-            }
-            read_state.build_number
+        let current_state = if let Ok(read_state) = state.read() {
+            read_state.clone()
         } else {
             info!("No CI build yet!");
             continue;
         };
+
+        let AggregatorStateInner {
+            build_number,
+            build_nodes,
+            enable_aggregation,
+        } = current_state;
+
+        if !enable_aggregation {
+            info!("Build {build_number} locked, waiting for new testnet start");
+            continue;
+        }
 
         let mut build_storage = if let Ok(Some(build_storage)) = storage.get(build_number) {
             build_storage
@@ -101,8 +105,30 @@ pub async fn poll_node_traces(
             continue;
         };
 
+        // Collect urls based on wether we want to access the nodes directly (only when aggregator is running inside the cluster) or trough the proxy
+
+        let (graphql_urls, tracing_urls, debugger_urls, producer_tracing_urls, seed_url) =
+            if environment.use_internal_endpoints {
+                (
+                    collect_all_urls_cluster_ip(&build_nodes, ComponentType::Graphql),
+                    collect_all_urls_cluster_ip(&build_nodes, ComponentType::InternalTracing),
+                    collect_all_urls_cluster_ip(&build_nodes, ComponentType::Debugger),
+                    collect_producer_urls_cluster_ip(&build_nodes, ComponentType::InternalTracing),
+                    get_seed_url_cluster_ip(&build_nodes, ComponentType::Graphql),
+                )
+            } else {
+                (
+                    collect_all_urls(environment, ComponentType::Graphql),
+                    collect_all_urls(environment, ComponentType::InternalTracing),
+                    collect_all_urls(environment, ComponentType::Debugger),
+                    collect_producer_urls(environment, ComponentType::InternalTracing),
+                    get_seed_url(environment, ComponentType::Graphql),
+                )
+            };
+
         info!("Collecting produced blocks...");
-        let mut blocks_on_most_recent_height = get_most_recent_produced_blocks(environment).await;
+        let mut blocks_on_most_recent_height =
+            get_most_recent_produced_blocks(environment, producer_tracing_urls).await;
         info!("Produced blocks collected");
 
         if blocks_on_most_recent_height.is_empty() {
@@ -130,7 +156,7 @@ pub async fn poll_node_traces(
 
         // collect node info
         info!("Collecting cluster nodes information");
-        let node_infos = get_node_info_from_cluster(environment).await;
+        let node_infos = get_node_info_from_cluster(graphql_urls).await;
         // println!("INF: {:#?}", node_infos);
         info!("Information collected");
 
@@ -159,7 +185,7 @@ pub async fn poll_node_traces(
 
         for (_, state_hash, _) in blocks_on_most_recent_height.clone() {
             info!("Collecting node traces for block {state_hash}");
-            let trace = get_block_trace_from_cluster(environment, &state_hash).await;
+            let trace = get_block_trace_from_cluster(tracing_urls.clone(), &state_hash).await;
             info!("Traces collected for block {state_hash}");
             info!("Aggregating trace data and traces for block {state_hash}");
             // println!("TRACES KEYS: {:#?}", trace.keys());
@@ -175,7 +201,7 @@ pub async fn poll_node_traces(
         // TODO: move this to a separate thread?
         info!("Polling debuggers for height {height}");
 
-        let ipc_data = pull_debugger_data_cpnp(Some(height), environment, &node_infos).await;
+        let ipc_data = pull_debugger_data_cpnp(Some(height), environment, debugger_urls).await;
 
         let (_, aggregated_ipc_data) =
             match aggregate_first_receive(ipc_data, &peer_id_to_tag_map, &tag_to_block_hash_map) {
@@ -194,7 +220,7 @@ pub async fn poll_node_traces(
         );
 
         info!("Updating best chain");
-        match get_best_chain(&get_seed_url(environment, &ComponentType::Graphql)).await {
+        match get_best_chain(&seed_url).await {
             Ok(best_chain) => {
                 best_chain.into_iter().for_each(|best_chain_block| {
                     build_storage.best_chain.push(best_chain_block.state_hash);

@@ -5,11 +5,9 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
-use crate::{config::AggregatorEnvironment, error::AggregatorError, AggregatorResult};
+use crate::{error::AggregatorError, AggregatorResult};
 
-use super::{
-    collect_all_urls, query_node, ComponentType, GraphqlResponse, TraceSource, TraceStatus,
-};
+use super::{query_node, GraphqlResponse, Nodes, TraceSource, TraceStatus};
 
 const STRUCTURED_TRACE_PAYLOAD: &str =
     r#"{"query": "{ blockStructuredTrace(block_identifier: \"{STATE_HASH}\" ) }" }"#;
@@ -89,12 +87,11 @@ async fn query_block_traces(
 }
 
 pub async fn get_block_trace_from_cluster(
-    environment: &AggregatorEnvironment,
+    nodes: Nodes,
     state_hash: &str,
 ) -> BTreeMap<String, BlockStructuredTrace> {
     let client = reqwest::Client::new();
 
-    let nodes = collect_all_urls(environment, ComponentType::InternalTracing);
     let bodies = stream::iter(nodes)
         .map(|(tag, url)| {
             let client = client.clone();

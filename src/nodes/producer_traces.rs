@@ -3,14 +3,9 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::{
-    config::AggregatorEnvironment,
-    error::AggregatorError,
-    nodes::{collect_producer_urls, ComponentType},
-    AggregatorResult,
-};
+use crate::{config::AggregatorEnvironment, error::AggregatorError, AggregatorResult};
 
-use super::{query_node, GraphqlResponse};
+use super::{query_node, GraphqlResponse, Nodes};
 
 const TRACES_PAYLOAD: &str = r#"{"query": "{ blockTraces(maxLength: 50, order: Descending) }" }"#;
 
@@ -97,11 +92,10 @@ async fn query_producer_internal_blocks(
 
 pub async fn get_most_recent_produced_blocks(
     environment: &AggregatorEnvironment,
-    // block_count: usize,
+    nodes: Nodes,
 ) -> Vec<(usize, String, String)> {
     let client = reqwest::Client::new();
 
-    let nodes = collect_producer_urls(environment, &ComponentType::InternalTracing);
     let bodies = stream::iter(nodes)
         .map(|(tag, url)| {
             let client = client.clone();

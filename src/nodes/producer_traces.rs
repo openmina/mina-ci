@@ -12,7 +12,7 @@ use crate::{
 
 use super::{query_node, GraphqlResponse};
 
-const TRACES_PAYLOAD: &str = r#"{"query": "{ blockTraces(maxLength: 50) }" }"#;
+const TRACES_PAYLOAD: &str = r#"{"query": "{ blockTraces(maxLength: 50, order: Descending) }" }"#;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -73,8 +73,7 @@ async fn query_producer_internal_blocks(
     let res_json: GraphqlResponse<BlockTracesData> = res.json().await?;
 
     // the traces are sorted by height in asc order, reverse to get the most recent ones on the top
-    let mut traces = res_json.data.block_traces.traces;
-    traces.reverse();
+    let traces = res_json.data.block_traces.traces;
 
     let most_recent_height = if !traces.is_empty() {
         // traces[0].blockchain_length.clone()

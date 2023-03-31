@@ -54,9 +54,8 @@ pub async fn poll_drone(
                 }
 
                 // TOOD: optimize this part
-                // TODO: REENABLE THIS!
-                // let is_ready = is_deployment_ready(build.number).await;
-                let is_ready = true;
+                let is_ready = is_deployment_ready(build.number).await;
+                // let is_ready = true;
                 if let Ok(mut write_locked_state) = state.write() {
                     write_locked_state.enable_aggregation = is_ready;
                 }

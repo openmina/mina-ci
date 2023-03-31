@@ -1,5 +1,5 @@
 
-### **How we utilize CI in improving the performance of the Mina network**
+# **How we utilize CI in improving the performance of the Mina network**
 
   
 
@@ -74,7 +74,7 @@ For these purposes, we utilize continuous integration (CI), a software developme
   
   
 
-### **CI-assisted testing and optimization**
+## **CI-assisted testing and optimization**
 
   
 
@@ -137,7 +137,7 @@ The aim is to generate enough zkApp transactions so that snark work would be nee
   
   
 
-### **Analyzing the data**
+## **Analyzing the data**
 
   
 
@@ -246,7 +246,7 @@ You can click on the graph to see that build’s details:
   
   
 
-#### **Environment**
+##### **Environment**
 
   
 
@@ -263,7 +263,7 @@ You can click on the graph to see that build’s details:
   
   
 
-#### **Blocks**
+##### **Blocks**
 
   
 
@@ -399,7 +399,7 @@ In the upper right corner of the screen, there are several buttons:
   
   
 
-#### **Histograms**
+##### **Histograms**
 
   
   

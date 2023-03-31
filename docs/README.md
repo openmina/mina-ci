@@ -1,7 +1,7 @@
 
 # **How we utilize CI in improving the performance of the Mina network**
 
-# Table of Contents
+### Table of Contents
 1. [Introduction](#Introduction)
 2. [CI-assisted testing and optimization](#CI-assisted-testing-and-optimization)
 3. [Analyzing the data](#Analyzing-the-data)

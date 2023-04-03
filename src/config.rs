@@ -28,6 +28,7 @@ pub struct AggregatorEnvironment {
     pub remote_storage_password: String,
     pub remote_storage_path: String,
     pub use_internal_endpoints: bool,
+    pub disable_aggregation: bool,
 }
 
 impl Display for AggregatorEnvironment {
@@ -50,7 +51,8 @@ impl Display for AggregatorEnvironment {
             f,
             "\tuse_internal_endpoints: {}",
             self.use_internal_endpoints
-        )
+        )?;
+        writeln!(f, "\tdisable_aggregation: {}", self.disable_aggregation)
     }
 }
 
@@ -119,6 +121,7 @@ pub fn set_environment() -> AggregatorEnvironment {
         env::var("REMOTE_STORAGE_PATH").unwrap_or_else(|_| REMOTE_STORAGE_PATH.to_string());
 
     let use_internal_endpoints = env::var("USE_INTERNAL_ENDPOINTS").is_ok();
+    let disable_aggregation = env::var("DISABLE_AGGREGATION").is_ok();
 
     AggregatorEnvironment {
         plain_node_count,
@@ -136,5 +139,6 @@ pub fn set_environment() -> AggregatorEnvironment {
         remote_storage_password,
         remote_storage_path,
         use_internal_endpoints,
+        disable_aggregation,
     }
 }

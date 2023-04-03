@@ -151,12 +151,13 @@ pub fn collect_producer_urls(
 
 pub fn collect_producer_urls_cluster_ip(
     build_nodes: &BuildNodes,
-    component: ComponentType,
+    component_type: ComponentType,
 ) -> Nodes {
-    let component = match component {
-        ComponentType::Graphql => GRAPHQL_COMPONENT,
-        ComponentType::Debugger => DEBUGGER_COMPONENT,
-        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    let (component, port) = match component_type {
+        // TODO: rework
+        ComponentType::Graphql => ("/graphql", "3085"),
+        ComponentType::Debugger => ("", "80"),
+        ComponentType::InternalTracing => ("/graphql", "8000"),
     };
 
     build_nodes
@@ -165,8 +166,8 @@ pub fn collect_producer_urls_cluster_ip(
         .map(|(tag, data)| {
             // TODO: get the port form the environmnet(inlcude in chart?)
             let url = format!(
-                "http://{}:3085/{}",
-                data.daemon_status.addrs_and_ports.external_ip, component
+                "http://{}:{port}{component}",
+                data.daemon_status.addrs_and_ports.external_ip
             );
             (tag.clone(), url)
         })
@@ -174,10 +175,11 @@ pub fn collect_producer_urls_cluster_ip(
 }
 
 pub fn get_seed_url_cluster_ip(build_nodes: &BuildNodes, component_type: ComponentType) -> String {
-    let component = match component_type {
-        ComponentType::Graphql => GRAPHQL_COMPONENT,
-        ComponentType::Debugger => DEBUGGER_COMPONENT,
-        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    let (component, port) = match component_type {
+        // TODO: rework
+        ComponentType::Graphql => ("/graphql", "3085"),
+        ComponentType::Debugger => ("", "80"),
+        ComponentType::InternalTracing => ("/graphql", "8000"),
     };
 
     build_nodes
@@ -185,8 +187,8 @@ pub fn get_seed_url_cluster_ip(build_nodes: &BuildNodes, component_type: Compone
         .find(|(tag, _)| tag.contains("seed1"))
         .map(|(_, data)| {
             format!(
-                "http://{}:3085/{}",
-                data.daemon_status.addrs_and_ports.external_ip, component
+                "http://{}:{port}{component}",
+                data.daemon_status.addrs_and_ports.external_ip
             )
         })
         .unwrap_or_default()
@@ -196,10 +198,11 @@ pub fn collect_all_urls_cluster_ip(
     build_nodes: &BuildNodes,
     component_type: ComponentType,
 ) -> Nodes {
-    let component = match component_type {
-        ComponentType::Graphql => GRAPHQL_COMPONENT,
-        ComponentType::Debugger => DEBUGGER_COMPONENT,
-        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    let (component, port) = match component_type {
+        // TODO: rework
+        ComponentType::Graphql => ("/graphql", "3085"),
+        ComponentType::Debugger => ("", "80"),
+        ComponentType::InternalTracing => ("/graphql", "8000"),
     };
 
     build_nodes
@@ -207,8 +210,8 @@ pub fn collect_all_urls_cluster_ip(
         .map(|(tag, data)| {
             // TODO: get the port form the environmnet(inlcude in chart?)
             let url = format!(
-                "http://{}:3085/{}",
-                data.daemon_status.addrs_and_ports.external_ip, component
+                "http://{}:{port}{component}",
+                data.daemon_status.addrs_and_ports.external_ip
             );
             (tag.clone(), url)
         })

@@ -114,7 +114,7 @@ pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, Daemon
         retries += 1;
     }
 
-    info!("Collected {}/{} traces", final_res.len(), nodes_count);
+    info!("Collected {}/{} nodes", final_res.len(), nodes_count);
 
     final_res
 

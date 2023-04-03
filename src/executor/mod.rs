@@ -131,24 +131,16 @@ pub async fn poll_node_traces(
             get_most_recent_produced_blocks(environment, producer_tracing_urls).await;
         info!("Produced blocks collected");
 
-        if blocks_on_most_recent_height.is_empty() {
+        // Catch the case that the block producers have different height for their most recent blocks
+        let height = if blocks_on_most_recent_height.is_empty() {
             info!("No blocks yet");
             continue;
-        }
+        } else {
+            let highest = blocks_on_most_recent_height.values().map(|v| v.height).max().unwrap_or_default();
+            blocks_on_most_recent_height.retain(|_, v| v.height == highest);
+            highest
+        };
 
-        // Catch the case that the block producers have different height for their most recent blocks
-        if blocks_on_most_recent_height.len() > 1
-            && !blocks_on_most_recent_height
-                .windows(2)
-                .all(|w| w[0].0 == w[1].0)
-        {
-            info!("Height missmatch on producers! Using highest block_height");
-            // With this check we can eliminate the scenraio when a block producer lags behind, retaining only the highest block_height
-            let highest = blocks_on_most_recent_height.iter().max().unwrap().0;
-            blocks_on_most_recent_height.retain(|(height, _, _)| height == &highest);
-        }
-
-        let height = blocks_on_most_recent_height[0].0;
         // let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> = BTreeMap::new();
         let mut block_traces = AggregatedBlockTraces::default();
 
@@ -173,9 +165,9 @@ pub async fn poll_node_traces(
 
         let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height
             .iter()
-            .map(|(_, state_hash, tag)| {
+            .map(|(tag, produced_block)| {
                 // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
-                (tag.to_string(), state_hash.to_string())
+                (tag.to_string(), produced_block.state_hash.clone())
             })
             .collect();
 
@@ -183,19 +175,19 @@ pub async fn poll_node_traces(
         // blocks_on_most_recent_height.sort_unstable();
         // blocks_on_most_recent_height.dedup();
 
-        for (_, state_hash, _) in blocks_on_most_recent_height.clone() {
-            info!("Collecting node traces for block {state_hash}");
-            let trace = get_block_trace_from_cluster(tracing_urls.clone(), &state_hash).await;
-            info!("Traces collected for block {state_hash}");
-            info!("Aggregating trace data and traces for block {state_hash}");
+        for (_, produced_block) in blocks_on_most_recent_height.clone() {
+            info!("Collecting node traces for block {}", produced_block.state_hash);
+            let trace = get_block_trace_from_cluster(tracing_urls.clone(), &produced_block.state_hash).await;
+            info!("Traces collected");
+            info!("Aggregating trace data");
             // println!("TRACES KEYS: {:#?}", trace.keys());
-            match aggregate_block_traces(height, &state_hash, &node_infos, trace) {
+            match aggregate_block_traces(height, &produced_block.state_hash, &node_infos, trace) {
                 Ok(data) => {
-                    block_traces.insert(state_hash.clone(), data);
+                    block_traces.insert(produced_block.state_hash.clone(), data);
                 }
                 Err(e) => warn!("{}", e),
             }
-            info!("Trace aggregation finished for block {state_hash}");
+            info!("Trace aggregation finished");
         }
 
         // TODO: move this to a separate thread?

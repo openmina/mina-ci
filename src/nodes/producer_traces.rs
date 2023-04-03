@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{time::Duration, collections::BTreeMap};
 
 use futures::{stream, StreamExt};
 use reqwest::StatusCode;
@@ -49,13 +49,20 @@ pub enum TraceStatus {
     Pending,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ProducedBlock {
+    pub height: usize,
+    pub state_hash: String,
+    pub tag: String,
+}
+
 #[instrument(skip(client, tag))]
 async fn query_producer_internal_blocks(
     client: reqwest::Client,
     url: &str,
     tag: &str,
     // block_count: usize,
-) -> AggregatorResult<Vec<(usize, String, String)>> {
+) -> AggregatorResult<BTreeMap<String, ProducedBlock>> {
     // let res: GraphqlResponse<BlockTracesData> = query_node(client, url, TRACES_PAYLOAD.to_string())
     //     .await?
     //     .json()
@@ -77,17 +84,25 @@ async fn query_producer_internal_blocks(
         // traces[0].blockchain_length.clone()
         traces[0].blockchain_length
     } else {
-        return Ok(vec![]);
+        return Ok(BTreeMap::new());
     };
 
-    let produced_blocks: Vec<(usize, String, String)> = traces
+    let produced_blocks: BTreeMap<String, ProducedBlock> = traces
         .into_iter()
         .filter(|trace| {
             trace.blockchain_length == most_recent_height
                 && (matches!(trace.source, TraceSource::Internal)
                     || matches!(trace.source, TraceSource::Unknown))
         })
-        .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
+        // .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
+        .map(|trace| {
+            let produced_block = ProducedBlock {
+                height: trace.blockchain_length,
+                state_hash: trace.state_hash,
+                tag: tag.to_string(),
+            };
+            (tag.to_string(), produced_block)
+        })
         .collect();
 
     Ok(produced_blocks)
@@ -96,13 +111,13 @@ async fn query_producer_internal_blocks(
 pub async fn get_most_recent_produced_blocks(
     environment: &AggregatorEnvironment,
     nodes: Nodes,
-) -> Vec<(usize, String, String)> {
+) -> BTreeMap<String, ProducedBlock> {
     let client = reqwest::Client::new();
 
     const MAX_RETRIES: usize = 5;
     let mut retries: usize = 0;
-    let nodes_to_query = nodes;
-    let mut final_res = Vec::new();
+    let mut nodes_to_query = nodes;
+    let mut final_res = BTreeMap::new();
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -118,7 +133,7 @@ pub async fn get_most_recent_produced_blocks(
             .buffer_unordered(environment.producer_node_count);
 
         let collected = bodies
-            .fold(Vec::new(), |mut collected, b| async {
+            .fold(BTreeMap::new(), |mut collected, b| async {
                 match b {
                     Ok((url, Ok(res))) => {
                         debug!("{url} OK");
@@ -132,6 +147,7 @@ pub async fn get_most_recent_produced_blocks(
             .await;
 
         final_res.extend(collected);
+        nodes_to_query.retain(|k, _| !final_res.contains_key(k));
 
         if final_res.len() == environment.producer_node_count {
             break;

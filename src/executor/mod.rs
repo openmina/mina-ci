@@ -223,7 +223,15 @@ pub async fn poll_node_traces(
         match get_best_chain(&seed_url).await {
             Ok(best_chain) => {
                 best_chain.into_iter().for_each(|best_chain_block| {
-                    build_storage.best_chain.push(best_chain_block.state_hash);
+                    let height = best_chain_block
+                        .protocol_state
+                        .consensus_state
+                        .block_height
+                        .parse()
+                        .unwrap_or_default();
+                    build_storage
+                        .best_chain
+                        .insert(height, best_chain_block.state_hash);
                 });
             }
             Err(e) => {

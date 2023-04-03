@@ -41,7 +41,7 @@ pub struct BuildStorage {
     #[serde(skip)]
     pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
     #[serde(skip)]
-    pub best_chain: Vec<BlockHash>,
+    pub best_chain: BTreeMap<BlockHeight, BlockHash>,
 }
 
 impl From<BuildStorage> for BuildStorageDump {
@@ -102,7 +102,7 @@ impl BuildStorage {
             .helpers
             .tx_count_per_block
             .iter()
-            .filter(|(k, _)| self.best_chain.contains(k))
+            .filter(|(k, _)| self.best_chain.iter().any(|(_, hash)| &hash == k))
             .map(|(_, v)| v)
             .sum();
 
@@ -272,7 +272,7 @@ pub struct BuildStorageDump {
     pub build_summary: BuildSummary,
     pub block_summaries: BTreeMap<BlockHash, BlockSummary>,
     pub helpers: BuildSummaryHelpers,
-    pub best_chain: Vec<BlockHash>,
+    pub best_chain: BTreeMap<BlockHeight, BlockHash>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -535,7 +535,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.best_chain = vec!["Height1Block1".to_string()];
+        storage.best_chain.insert(1, "Height1Block1".to_string());
 
         storage.update_summary(height, &block_traces);
 
@@ -682,7 +682,9 @@ mod tests {
             ..Default::default()
         };
 
-        storage.best_chain = vec!["Height1Block1".to_string(), "Height2Block1".to_string()];
+        // storage.best_chain = vec!["Height1Block1".to_string(), "Height2Block1".to_string()];
+        storage.best_chain.insert(1, "Height1Block1".to_string());
+        storage.best_chain.insert(2, "Height2Block1".to_string());
 
         let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3];
         let mut block_traces = AggregatedBlockTraces::default();
@@ -922,7 +924,9 @@ mod tests {
         let raw_traces: Vec<BlockTraceAggregatorReport> = vec![trace_1, trace_2, trace_3, trace_4];
         block_traces.insert(block_hash, raw_traces);
 
-        storage.best_chain = vec!["Height1Block1".to_string(), "Height2Block2".to_string()];
+        // storage.best_chain = vec!["Height1Block1".to_string(), "Height2Block2".to_string()];
+        storage.best_chain.insert(1, "Height1Block1".to_string());
+        storage.best_chain.insert(2, "Height2Block2".to_string());
 
         storage.update_summary(height, &block_traces);
 

@@ -1,8 +1,9 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use futures::{stream, StreamExt};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
 use crate::{error::AggregatorError, AggregatorResult};
@@ -75,33 +76,72 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
 pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, DaemonStatusDataSlim> {
     let client = reqwest::Client::new();
 
-    let bodies = stream::iter(nodes)
-        .map(|(tag, url)| {
-            let client = client.clone();
-            tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
-        })
-        .buffer_unordered(150);
+    const MAX_RETRIES: usize = 5;
+    let mut retries: usize = 0;
+    let nodes_count = nodes.len();
+    let mut nodes_to_query = nodes;
+    let mut final_res = BTreeMap::new();
 
-    let collected = bodies
-        .fold(BTreeMap::new(), |mut collected, b| async {
-            match b {
-                Ok((tag, Ok(res))) => {
-                    // info!("{tag} OK");
-                    collected.insert(tag, res.into());
+    while retries < MAX_RETRIES {
+        let bodies = stream::iter(nodes_to_query.clone())
+            .map(|(tag, url)| {
+                let client = client.clone();
+                tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
+            })
+            .buffer_unordered(150);
+
+        let collected = bodies
+            .fold(BTreeMap::new(), |mut collected, b| async {
+                match b {
+                    Ok((tag, Ok(res))) => {
+                        collected.insert(tag, res.into());
+                    }
+                    Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
+                    Err(e) => error!("Tokio join error: {e}"),
                 }
-                Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
-                Err(e) => error!("Tokio join error: {e}"),
-            }
-            collected
-        })
-        .await;
+                collected
+            })
+            .await;
 
-    info!("Collected {} nodes", collected.len());
+        final_res.extend(collected);
+        nodes_to_query.retain(|k, _| !final_res.contains_key(k));
 
-    // println!("TAGS COLLECTED: {:#?}", collected.keys());
-    // println!("IPS COLLECTED: {:#?}", collected.values());
+        if nodes_to_query.is_empty() {
+            break;
+        }
 
-    collected
+        sleep(Duration::from_secs(1)).await;
+        retries += 1;
+    }
+
+    info!("Collected {}/{} traces", final_res.len(), nodes_count);
+
+    final_res
+
+    // let bodies = stream::iter(nodes)
+    //     .map(|(tag, url)| {
+    //         let client = client.clone();
+    //         tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
+    //     })
+    //     .buffer_unordered(150);
+
+    // let collected = bodies
+    //     .fold(BTreeMap::new(), |mut collected, b| async {
+    //         match b {
+    //             Ok((tag, Ok(res))) => {
+    //                 // info!("{tag} OK");
+    //                 collected.insert(tag, res.into());
+    //             }
+    //             Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
+    //             Err(e) => error!("Tokio join error: {e}"),
+    //         }
+    //         collected
+    //     })
+    //     .await;
+
+    // info!("Collected {} nodes", collected.len());
+
+    // collected
 }
 
 async fn query_node_info(client: reqwest::Client, url: &str) -> AggregatorResult<DaemonStatusData> {

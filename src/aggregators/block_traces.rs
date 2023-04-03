@@ -18,6 +18,27 @@ pub struct AggregatedBlockTraces {
 
 impl AggregatedBlockTraces {
     pub fn insert(&mut self, hash: BlockHash, traces: Vec<BlockTraceAggregatorReport>) {
+        // self.inner
+        //     .entry(hash)
+        //     .and_modify(|stored_traces| {
+        //         // TODO: change the storage to save a map of traces with the node tag as key
+        //         // Note: for now, convert to maps and back to vec so we don't have to change the storage
+        //         // convert both vectors to maps
+        //         let mut stored_traces_map: BTreeMap<String, BlockTraceAggregatorReport> =
+        //             stored_traces
+        //                 .iter()
+        //                 .map(|trace| (trace.node.clone(), trace.clone()))
+        //                 .collect();
+        //         let traces_map: BTreeMap<String, BlockTraceAggregatorReport> = traces
+        //             .iter()
+        //             .map(|trace| (trace.node.clone(), trace.clone()))
+        //             .collect();
+
+        //         stored_traces_map.extend(traces_map);
+        //         // collect back to vector
+        //         *stored_traces = stored_traces_map.values().cloned().collect();
+        //     })
+        //     .or_insert(traces);
         self.inner.insert(hash, traces);
     }
 

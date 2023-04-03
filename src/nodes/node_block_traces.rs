@@ -1,9 +1,10 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use futures::{stream, StreamExt};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tokio::time::sleep;
+use tracing::{error, info, warn};
 
 use crate::{error::AggregatorError, AggregatorResult};
 
@@ -92,35 +93,54 @@ pub async fn get_block_trace_from_cluster(
 ) -> BTreeMap<String, BlockStructuredTrace> {
     let client = reqwest::Client::new();
 
-    let bodies = stream::iter(nodes)
-        .map(|(tag, url)| {
-            let client = client.clone();
-            let state_hash = state_hash.to_string();
-            tokio::spawn(async move {
-                (
-                    tag.clone(),
-                    query_block_traces(client, &url, &state_hash).await,
-                )
+    const MAX_RETRIES: usize = 5;
+    let mut retries: usize = 0;
+    let nodes_count = nodes.len();
+    let mut nodes_to_query = nodes;
+    let mut final_res: BTreeMap<String, BlockStructuredTrace> = BTreeMap::new();
+
+    while retries < MAX_RETRIES {
+        let bodies = stream::iter(nodes_to_query.clone())
+            .map(|(tag, url)| {
+                let client = client.clone();
+                let state_hash = state_hash.to_string();
+                tokio::spawn(async move {
+                    (
+                        tag.clone(),
+                        query_block_traces(client, &url, &state_hash).await,
+                    )
+                })
             })
-        })
-        .buffer_unordered(150);
+            .buffer_unordered(150);
 
-    let collected: BTreeMap<String, BlockStructuredTrace> = bodies
-        .fold(
-            BTreeMap::<String, BlockStructuredTrace>::new(),
-            |mut collected, b| async {
-                match b {
-                    Ok((tag, Ok(res))) => {
-                        // info!("{url} OK");
-                        collected.insert(tag, res);
+        let collected: BTreeMap<String, BlockStructuredTrace> = bodies
+            .fold(
+                BTreeMap::<String, BlockStructuredTrace>::new(),
+                |mut collected, b| async {
+                    match b {
+                        Ok((tag, Ok(res))) => {
+                            collected.insert(tag, res);
+                        }
+                        Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
+                        Err(e) => error!("Tokio join error: {e}"),
                     }
-                    Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
-                    Err(e) => error!("Tokio join error: {e}"),
-                }
-                collected
-            },
-        )
-        .await;
+                    collected
+                },
+            )
+            .await;
 
-    collected
+        final_res.extend(collected);
+        nodes_to_query.retain(|k, _| !final_res.contains_key(k));
+
+        if nodes_to_query.is_empty() {
+            break;
+        }
+
+        sleep(Duration::from_secs(1)).await;
+        retries += 1;
+    }
+
+    info!("Collected {}/{} traces", final_res.len(), nodes_count);
+
+    final_res
 }

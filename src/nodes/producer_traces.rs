@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use futures::{stream, StreamExt};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{config::AggregatorEnvironment, error::AggregatorError, AggregatorResult};
@@ -96,41 +99,76 @@ pub async fn get_most_recent_produced_blocks(
 ) -> Vec<(usize, String, String)> {
     let client = reqwest::Client::new();
 
-    let bodies = stream::iter(nodes)
-        .map(|(tag, url)| {
-            let client = client.clone();
-            tokio::spawn(async move {
-                (
-                    url.clone(),
-                    query_producer_internal_blocks(client, &url, &tag).await,
-                )
+    const MAX_RETRIES: usize = 5;
+    let mut retries: usize = 0;
+    let nodes_to_query = nodes;
+    let mut final_res = Vec::new();
+
+    while retries < MAX_RETRIES {
+        let bodies = stream::iter(nodes_to_query.clone())
+            .map(|(tag, url)| {
+                let client = client.clone();
+                tokio::spawn(async move {
+                    (
+                        url.clone(),
+                        query_producer_internal_blocks(client, &url, &tag).await,
+                    )
+                })
             })
-        })
-        .buffer_unordered(environment.producer_node_count);
+            .buffer_unordered(environment.producer_node_count);
 
-    let collected = bodies
-        .fold(Vec::new(), |mut collected, b| async {
-            match b {
-                Ok((url, Ok(res))) => {
-                    debug!("{url} OK");
-                    // let res: Vec<(usize, String, String)> = res
-                    //     .into_iter()
-                    //     .map(|(height, state_hash, tag)| {
-                    //         // parsing shold be OK, as it is always a positive number, but lets change the graphql to report a number as height
-                    //         (height.parse::<usize>().unwrap(), state_hash, tag)
-                    //     })
-                    //     .collect();
-                    collected.extend(res);
+        let collected = bodies
+            .fold(Vec::new(), |mut collected, b| async {
+                match b {
+                    Ok((url, Ok(res))) => {
+                        debug!("{url} OK");
+                        collected.extend(res);
+                    }
+                    Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
+                    Err(e) => error!("Tokio join error: {e}"),
                 }
-                Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
-                Err(e) => error!("Tokio join error: {e}"),
-            }
-            collected
-        })
-        .await;
+                collected
+            })
+            .await;
 
-    info!("Collected {} produced blocks", collected.len());
-    // println!("Blocks: {:#?}", collected);
+        final_res.extend(collected);
 
-    collected
+        if final_res.len() == environment.producer_node_count {
+            break;
+        }
+
+        sleep(Duration::from_secs(1)).await;
+        retries += 1;
+    }
+
+    info!("Collected {} produced blocks", final_res.len());
+
+    final_res
+
+    // let bodies = stream::iter(nodes)
+    //     .map(|(tag, url)| {
+    //         let client = client.clone();
+    //         tokio::spawn(async move {
+    //             (
+    //                 url.clone(),
+    //                 query_producer_internal_blocks(client, &url, &tag).await,
+    //             )
+    //         })
+    //     })
+    //     .buffer_unordered(environment.producer_node_count);
+
+    // let collected = bodies
+    //     .fold(Vec::new(), |mut collected, b| async {
+    //         match b {
+    //             Ok((url, Ok(res))) => {
+    //                 debug!("{url} OK");
+    //                 collected.extend(res);
+    //             }
+    //             Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
+    //             Err(e) => error!("Tokio join error: {e}"),
+    //         }
+    //         collected
+    //     })
+    //     .await;
+    // collected
 }

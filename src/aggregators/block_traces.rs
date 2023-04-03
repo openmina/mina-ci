@@ -42,6 +42,10 @@ impl AggregatedBlockTraces {
         self.inner.insert(hash, traces);
     }
 
+    pub fn trace_count(&self, hash: &BlockHash) -> usize {
+        self.inner.get(hash).map(|traces| traces.len()).unwrap_or_default()
+    }
+
     // TODO: remove this ideally
     pub fn inner(&self) -> BTreeMap<String, Vec<BlockTraceAggregatorReport>> {
         self.inner.clone()

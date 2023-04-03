@@ -141,7 +141,8 @@ pub async fn poll_node_traces(
         };
 
         // let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> = BTreeMap::new();
-        let mut block_traces = AggregatedBlockTraces::default();
+        // let mut block_traces = AggregatedBlockTraces::default();
+        let mut block_traces = build_storage.trace_storage.get(&height).cloned().unwrap_or_default();
 
         info!("Height: {height}");
 
@@ -176,13 +177,11 @@ pub async fn poll_node_traces(
 
         for (_, produced_block) in blocks_on_most_recent_height.clone() {
             // check if all the traces were collected for this block
-            if let Some(block_traces) = build_storage.trace_storage.get(&height) {
-                let traces_count = block_traces.trace_count(&produced_block.state_hash);
-                info!("Already saved trace count: {traces_count}");
-                if traces_count == environment.total_node_count() {
-                    info!("Traces already collected for block {}", produced_block.state_hash);
-                    continue;
-                }
+            let traces_count = block_traces.trace_count(&produced_block.state_hash);
+            info!("Already saved trace count: {traces_count}");
+            if traces_count == environment.total_node_count() {
+                info!("Traces already collected for block {}", produced_block.state_hash);
+                continue;
             }
 
             info!("Collecting node traces for block {}", produced_block.state_hash);

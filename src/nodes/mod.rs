@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,7 @@ async fn query_node(
         .post(url)
         .body(payload)
         .header("Content-Type", "application/json")
+        .timeout(Duration::from_secs(5))
         .send()
         .await?)
 }

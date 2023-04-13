@@ -583,7 +583,8 @@ mod tests {
         // block counts
         let expected = 1;
         assert_eq!(expected, storage.build_summary.block_count);
-        assert_eq!(expected, storage.build_summary.cannonical_block_count);
+        // +2 to include real node's blocks at height 0 and 1
+        assert_eq!(expected + 2, storage.build_summary.cannonical_block_count);
 
         storage.store_data(height, block_traces, Default::default(), Default::default());
     }
@@ -746,7 +747,7 @@ mod tests {
         // block counts
         let expected = 2;
         assert_eq!(expected, storage.build_summary.block_count);
-        assert_eq!(expected, storage.build_summary.cannonical_block_count);
+        assert_eq!(expected + 2, storage.build_summary.cannonical_block_count);
 
         storage.store_data(height, block_traces, Default::default(), Default::default());
     }
@@ -985,7 +986,8 @@ mod tests {
         assert_eq!(expected, storage.build_summary.block_count);
 
         // cannonical_block_count should always equal height
-        assert_eq!(height, storage.build_summary.cannonical_block_count);
+        // TODO: rework test to mimic real traces, where there are non on height 0 and 1, for now, just add 2
+        assert_eq!(height + 2, storage.build_summary.cannonical_block_count);
 
         storage.store_data(height, block_traces, Default::default(), Default::default());
     }

@@ -260,13 +260,21 @@ pub fn aggregate_block_traces(
         .iter()
         .map(|(node, node_info)| {
             let trace = traces.get(node);
-            let tx_count = trace.and_then(|t| t.metadata.txn_count);
+            let tx_count = trace.and_then(|t| {
+                t.metadata.txn_count.and_then(|total_txs| {
+                    t.metadata.diff_log.clone().and_then(|diff_logs| {
+                        diff_logs
+                            .last()
+                            .map(|d| total_txs - d.discarded_commands.total())
+                    })
+                })
+            });
             BlockTraceAggregatorReport {
                 block_hash: state_hash.to_string(),
                 is_producer: producer_nodes.contains(node),
                 global_slot: trace.and_then(|t| t.metadata.global_slot.clone()),
                 block_producer: trace.and_then(|t| t.metadata.creator.clone()),
-                included_tranasction_count: tx_count, // TODO
+                included_tranasction_count: tx_count,
                 height,
                 node: node.to_string(),
                 node_address: node_info.daemon_status.addrs_and_ports.external_ip.clone(),
@@ -291,6 +299,8 @@ pub fn aggregate_block_traces(
         .collect();
     Ok(report)
 }
+#[cfg(test)]
+mod tests {}
 
 // #[cfg(test)]
 // mod tests {

@@ -53,6 +53,24 @@ pub struct BlockStructuredTraceMetadata {
     pub creator: Option<String>,
     pub winner: Option<String>,
     pub coinbase_receiver: Option<String>,
+    pub diff_log: Option<Vec<DiffLogPart>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DiffLogPart {
+    pub discarded_commands: DiscardedCommands,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DiscardedCommands {
+    pub insufficient_work: usize,
+    pub insufficient_space: usize,
+}
+
+impl DiscardedCommands {
+    pub fn total(&self) -> usize {
+        self.insufficient_space + self.insufficient_work
+    }
 }
 
 async fn query_block_traces(

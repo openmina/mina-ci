@@ -91,8 +91,7 @@ async fn query_producer_internal_blocks(
         .into_iter()
         .filter(|trace| {
             trace.blockchain_length == most_recent_height
-                && (matches!(trace.source, TraceSource::Internal)
-                    || matches!(trace.source, TraceSource::Unknown))
+                && matches!(trace.source, TraceSource::Internal)
         })
         // .map(|trace| (trace.blockchain_length, trace.state_hash, tag.to_string()))
         .map(|trace| {

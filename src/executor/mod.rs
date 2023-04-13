@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use tokio::time::sleep;
 use tracing::{info, instrument, warn};
@@ -68,7 +68,9 @@ async fn get_height_data_cpnp(
             base_url, environment.libp2p_ipc_encpoint, "latest"
         )
     };
-    reqwest::get(url).await?.json().await.map_err(|e| e.into())
+    // reqwest::get(url).await?.json().await.map_err(|e| e.into())
+    let client = reqwest::Client::new();
+    client.get(url).timeout(Duration::from_secs(5)).send().await?.json().await.map_err(|e| e.into())
 }
 
 pub async fn poll_node_traces(

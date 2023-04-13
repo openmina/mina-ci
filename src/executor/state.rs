@@ -23,6 +23,7 @@ const DEPLOY_STEP_NAME: &str = "deploy-nodes";
 pub struct AggregatorStateInner {
     pub build_number: usize,
     pub enable_aggregation: bool,
+    pub is_cluster_ready: bool,
     pub build_nodes: BTreeMap<String, DaemonStatusDataSlim>,
     // pub current_height: usize,
 }
@@ -44,6 +45,7 @@ pub async fn poll_drone(
                         // save the storage when detecting new build
                         remote_storage.save_storage(storage);
                         write_locked_state.build_number = build.number;
+                        write_locked_state.is_cluster_ready = false;
                         write_locked_state.enable_aggregation = false;
 
                         // clear out the build nodes data, as the netwokr will be restarted
@@ -66,9 +68,10 @@ pub async fn poll_drone(
 
                 // TODO: optimize this part
                 // TODO: REENABLE THIS!!
-                // let is_cluster_ready = is_deployment_ready(build.number).await;
-                let is_cluster_ready = true;
+                let is_cluster_ready = is_deployment_ready(build.number).await;
+                // let is_cluster_ready = true;
                 if let Ok(mut write_locked_state) = state.write() {
+                    write_locked_state.is_cluster_ready = is_cluster_ready;
                     let is_ready = if environment.use_internal_endpoints {
                         is_cluster_ready && !write_locked_state.build_nodes.is_empty()
                     } else {
@@ -154,7 +157,9 @@ pub async fn poll_info_from_cluster(environment: &AggregatorEnvironment, state: 
         // execute only when the nodes are empty (emptied by the drone pulling thread)
         match state.read() {
             Ok(read_locked_storage) => {
-                if !read_locked_storage.build_nodes.is_empty() {
+                if !read_locked_storage.build_nodes.is_empty()
+                    || !read_locked_storage.is_cluster_ready
+                {
                     continue;
                 } else {
                     info!("Nodes redeployed pulling new IPs");

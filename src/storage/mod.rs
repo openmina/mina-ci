@@ -164,7 +164,8 @@ impl BuildStorage {
             .block_count_per_height
             .insert(height, unique_block_count);
         self.build_summary.block_count = self.helpers.block_count_per_height.values().sum();
-        self.build_summary.cannonical_block_count = self.helpers.application_total.len();
+        // We don't have traces for blocks on height 0 and 1, so add them in
+        self.build_summary.cannonical_block_count = self.helpers.application_total.len() + 2;
 
         if self.build_summary.block_application_min == 0.0 {
             self.build_summary.block_application_min = application_min;

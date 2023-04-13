@@ -4,7 +4,7 @@ use tokio::time::sleep;
 use tracing::{info, instrument, warn};
 
 use crate::{
-    aggregators::{aggregate_block_traces, aggregate_first_receive, AggregatedBlockTraces},
+    aggregators::{aggregate_block_traces, aggregate_first_receive},
     config::AggregatorEnvironment,
     cross_validation::cross_validate_ipc_with_traces,
     debugger_data::{CpnpCapturedData, DebuggerCpnpResponse},
@@ -91,6 +91,7 @@ pub async fn poll_node_traces(
             build_number,
             build_nodes,
             enable_aggregation,
+            ..
         } = current_state;
 
         if !enable_aggregation {
@@ -135,14 +136,22 @@ pub async fn poll_node_traces(
             info!("No blocks yet");
             continue;
         } else {
-            let highest = blocks_on_most_recent_height.values().map(|v| v.height).max().unwrap_or_default();
+            let highest = blocks_on_most_recent_height
+                .values()
+                .map(|v| v.height)
+                .max()
+                .unwrap_or_default();
             blocks_on_most_recent_height.retain(|_, v| v.height == highest);
             highest
         };
 
         // let mut block_traces: BTreeMap<String, Vec<BlockTraceAggregatorReport>> = BTreeMap::new();
         // let mut block_traces = AggregatedBlockTraces::default();
-        let mut block_traces = build_storage.trace_storage.get(&height).cloned().unwrap_or_default();
+        let mut block_traces = build_storage
+            .trace_storage
+            .get(&height)
+            .cloned()
+            .unwrap_or_default();
 
         info!("Height: {height}");
 
@@ -176,16 +185,13 @@ pub async fn poll_node_traces(
         // blocks_on_most_recent_height.dedup();
 
         for (_, produced_block) in blocks_on_most_recent_height.clone() {
-            // check if all the traces were collected for this block
-            let traces_count = block_traces.trace_count(&produced_block.state_hash);
-            info!("Already saved trace count: {traces_count}");
-            if traces_count == environment.total_node_count() {
-                info!("Traces already collected for block {}", produced_block.state_hash);
-                continue;
-            }
-
-            info!("Collecting node traces for block {}", produced_block.state_hash);
-            let trace = get_block_trace_from_cluster(tracing_urls.clone(), &produced_block.state_hash).await;
+            info!(
+                "Collecting node traces for block {}",
+                produced_block.state_hash
+            );
+            let trace =
+                get_block_trace_from_cluster(tracing_urls.clone(), &produced_block.state_hash)
+                    .await;
             info!("Traces collected");
             info!("Aggregating trace data");
             // println!("TRACES KEYS: {:#?}", trace.keys());

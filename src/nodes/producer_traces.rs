@@ -1,4 +1,4 @@
-use std::{time::Duration, collections::BTreeMap};
+use std::{collections::BTreeMap, time::Duration};
 
 use futures::{stream, StreamExt};
 use reqwest::StatusCode;

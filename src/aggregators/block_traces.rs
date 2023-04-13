@@ -43,7 +43,10 @@ impl AggregatedBlockTraces {
     }
 
     pub fn trace_count(&self, hash: &BlockHash) -> usize {
-        self.inner.get(hash).map(|traces| traces.len()).unwrap_or_default()
+        self.inner
+            .get(hash)
+            .map(|traces| traces.len())
+            .unwrap_or_default()
     }
 
     // TODO: remove this ideally

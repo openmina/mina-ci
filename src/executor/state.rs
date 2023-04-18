@@ -172,7 +172,7 @@ pub async fn poll_info_from_cluster(environment: &AggregatorEnvironment, state: 
         let mut retries: usize = 0;
         let nodes = collect_all_urls(environment, ComponentType::Graphql);
         while retries < MAX_RETRIES {
-            let nodes = get_node_info_from_cluster(nodes.clone()).await;
+            let (nodes, _) = get_node_info_from_cluster(nodes.clone()).await;
             node_status_final.extend(nodes);
 
             if node_status_final.len() == environment.total_node_count() {

@@ -108,7 +108,7 @@ async fn query_block_traces(
 pub async fn get_block_trace_from_cluster(
     nodes: Nodes,
     state_hash: &str,
-) -> BTreeMap<String, BlockStructuredTrace> {
+) -> (BTreeMap<String, BlockStructuredTrace>, usize) {
     let client = reqwest::Client::new();
 
     const MAX_RETRIES: usize = 5;
@@ -116,6 +116,7 @@ pub async fn get_block_trace_from_cluster(
     let nodes_count = nodes.len();
     let mut nodes_to_query = nodes;
     let mut final_res: BTreeMap<String, BlockStructuredTrace> = BTreeMap::new();
+    let mut total_timeouts: usize = 0;
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -131,24 +132,32 @@ pub async fn get_block_trace_from_cluster(
             })
             .buffer_unordered(150);
 
-        let collected: BTreeMap<String, BlockStructuredTrace> = bodies
+        let (collected, timeouts): (BTreeMap<String, BlockStructuredTrace>, usize) = bodies
             .fold(
-                BTreeMap::<String, BlockStructuredTrace>::new(),
-                |mut collected, b| async {
+                (BTreeMap::<String, BlockStructuredTrace>::new(), 0),
+                |(mut collected, mut timeouts), b| async move {
                     match b {
                         Ok((tag, Ok(res))) => {
                             collected.insert(tag, res);
                         }
-                        Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
+                        Ok((tag, Err(e))) => {
+                            warn!("Error requestig {tag}, reason: {}", e);
+                            if let AggregatorError::OutgoingRpcError(reqwest_error) = e {
+                                if reqwest_error.is_timeout() {
+                                    timeouts += 1;
+                                }
+                            };
+                        }
                         Err(e) => error!("Tokio join error: {e}"),
                     }
-                    collected
+                    (collected, timeouts)
                 },
             )
             .await;
 
         final_res.extend(collected);
         nodes_to_query.retain(|k, _| !final_res.contains_key(k));
+        total_timeouts += timeouts;
 
         if nodes_to_query.is_empty() {
             break;
@@ -158,7 +167,13 @@ pub async fn get_block_trace_from_cluster(
         retries += 1;
     }
 
-    info!("Collected {}/{} traces", final_res.len(), nodes_count);
+    // info!("Timeouts: {total_timeouts}");
+    info!(
+        "Collected {}/{} traces - Timeouts: {}",
+        final_res.len(),
+        nodes_count,
+        total_timeouts
+    );
 
-    final_res
+    (final_res, total_timeouts)
 }

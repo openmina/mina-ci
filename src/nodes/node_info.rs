@@ -73,7 +73,9 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
 
 #[instrument(skip(nodes))]
 /// Fires requests to all the nodes and collects their IPs (requests are parallel)
-pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, DaemonStatusDataSlim> {
+pub async fn get_node_info_from_cluster(
+    nodes: Nodes,
+) -> (BTreeMap<String, DaemonStatusDataSlim>, usize) {
     let client = reqwest::Client::new();
 
     const MAX_RETRIES: usize = 5;
@@ -81,6 +83,7 @@ pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, Daemon
     let nodes_count = nodes.len();
     let mut nodes_to_query = nodes;
     let mut final_res = BTreeMap::new();
+    let mut total_timeouts = 0;
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -90,21 +93,32 @@ pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, Daemon
             })
             .buffer_unordered(150);
 
-        let collected = bodies
-            .fold(BTreeMap::new(), |mut collected, b| async {
-                match b {
-                    Ok((tag, Ok(res))) => {
-                        collected.insert(tag, res.into());
+        let (collected, timeouts): (_, usize) = bodies
+            .fold(
+                (BTreeMap::new(), 0),
+                |(mut collected, mut timeouts), b| async move {
+                    match b {
+                        Ok((tag, Ok(res))) => {
+                            collected.insert(tag, res.into());
+                        }
+                        Ok((tag, Err(e))) => {
+                            warn!("Error requestig {tag}, reason: {}", e);
+                            if let AggregatorError::OutgoingRpcError(reqwest_error) = e {
+                                if reqwest_error.is_timeout() {
+                                    timeouts += 1;
+                                }
+                            };
+                        }
+                        Err(e) => error!("Tokio join error: {e}"),
                     }
-                    Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
-                    Err(e) => error!("Tokio join error: {e}"),
-                }
-                collected
-            })
+                    (collected, timeouts)
+                },
+            )
             .await;
 
         final_res.extend(collected);
         nodes_to_query.retain(|k, _| !final_res.contains_key(k));
+        total_timeouts += timeouts;
 
         if nodes_to_query.is_empty() {
             break;
@@ -116,7 +130,7 @@ pub async fn get_node_info_from_cluster(nodes: Nodes) -> BTreeMap<String, Daemon
 
     info!("Collected {}/{} nodes", final_res.len(), nodes_count);
 
-    final_res
+    (final_res, total_timeouts)
 
     // let bodies = stream::iter(nodes)
     //     .map(|(tag, url)| {

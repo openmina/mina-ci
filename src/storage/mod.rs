@@ -89,7 +89,12 @@ impl BuildStorage {
             .insert(height, cross_validation_report);
     }
 
-    pub fn update_summary(&mut self, height: usize, block_traces: &AggregatedBlockTraces) {
+    pub fn update_summary(
+        &mut self,
+        height: usize,
+        block_traces: &AggregatedBlockTraces,
+        timeouts: usize,
+    ) {
         // per block summaries
         self.block_summaries
             .extend(block_traces.block_summaries(height));
@@ -97,6 +102,8 @@ impl BuildStorage {
         for (block_hash, tx_count) in block_traces.transaction_count_per_block() {
             self.helpers.tx_count_per_block.insert(block_hash, tx_count);
         }
+
+        self.build_summary.request_timeout_count += timeouts;
 
         self.build_summary.tx_count = self
             .helpers
@@ -328,6 +335,7 @@ pub struct BuildSummary {
     pub block_production_regression: bool,
     pub block_application_regression: bool,
     pub receive_latency_regression: bool,
+    pub request_timeout_count: usize,
     // #[serde(skip)]
     // pub avg_total_count: usize,
     // #[serde(skip)]
@@ -538,7 +546,7 @@ mod tests {
 
         storage.best_chain.insert(1, "Height1Block1".to_string());
 
-        storage.update_summary(height, &block_traces);
+        storage.update_summary(height, &block_traces, 0);
 
         // check min, max and average calculations
 
@@ -640,7 +648,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.update_summary(height, &block_traces);
+        storage.update_summary(height, &block_traces, 0);
         storage.store_data(height, block_traces, Default::default(), Default::default());
 
         // height 2 block 1
@@ -693,7 +701,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.update_summary(height, &block_traces);
+        storage.update_summary(height, &block_traces, 0);
 
         // check min, max and average calculations
         // production times
@@ -814,7 +822,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.update_summary(height, &block_traces);
+        storage.update_summary(height, &block_traces, 0);
         storage.store_data(height, block_traces, Default::default(), Default::default());
 
         // height 2 block 1
@@ -930,7 +938,7 @@ mod tests {
         storage.best_chain.insert(1, "Height1Block1".to_string());
         storage.best_chain.insert(2, "Height2Block2".to_string());
 
-        storage.update_summary(height, &block_traces);
+        storage.update_summary(height, &block_traces, 0);
 
         // check min, max and average calculations
         // production times

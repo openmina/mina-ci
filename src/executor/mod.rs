@@ -70,7 +70,14 @@ async fn get_height_data_cpnp(
     };
     // reqwest::get(url).await?.json().await.map_err(|e| e.into())
     let client = reqwest::Client::new();
-    client.get(url).timeout(Duration::from_secs(5)).send().await?.json().await.map_err(|e| e.into())
+    client
+        .get(url)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await?
+        .json()
+        .await
+        .map_err(|e| e.into())
 }
 
 pub async fn poll_node_traces(
@@ -108,6 +115,8 @@ pub async fn poll_node_traces(
             continue;
         };
 
+        let mut total_timeouts: usize = 0;
+
         // Collect urls based on wether we want to access the nodes directly (only when aggregator is running inside the cluster) or trough the proxy
         let (graphql_urls, tracing_urls, debugger_urls, producer_tracing_urls, seed_url) =
             if environment.use_internal_endpoints {
@@ -129,9 +138,11 @@ pub async fn poll_node_traces(
             };
 
         info!("Collecting produced blocks...");
-        let mut blocks_on_most_recent_height =
+        let (mut blocks_on_most_recent_height, producer_trace_timeouts) =
             get_most_recent_produced_blocks(environment, producer_tracing_urls).await;
         info!("Produced blocks collected");
+
+        total_timeouts += producer_trace_timeouts;
 
         // Catch the case that the block producers have different height for their most recent blocks
         let height = if blocks_on_most_recent_height.is_empty() {
@@ -159,9 +170,10 @@ pub async fn poll_node_traces(
 
         // collect node info
         info!("Collecting cluster nodes information");
-        let node_infos = get_node_info_from_cluster(graphql_urls).await;
+        let (node_infos, node_info_timeouts) = get_node_info_from_cluster(graphql_urls).await;
         // println!("INF: {:#?}", node_infos);
         info!("Information collected");
+        total_timeouts += node_info_timeouts;
 
         // build a map that maps peer_id to tag
         let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
@@ -191,7 +203,7 @@ pub async fn poll_node_traces(
                 "Collecting node traces for block {}",
                 produced_block.state_hash
             );
-            let trace =
+            let (trace, timeouts) =
                 get_block_trace_from_cluster(tracing_urls.clone(), &produced_block.state_hash)
                     .await;
             info!("Traces collected");
@@ -203,6 +215,7 @@ pub async fn poll_node_traces(
                 }
                 Err(e) => warn!("{}", e),
             }
+            total_timeouts += timeouts;
             info!("Trace aggregation finished");
         }
 
@@ -247,7 +260,7 @@ pub async fn poll_node_traces(
             }
         }
 
-        build_storage.update_summary(height, &block_traces);
+        build_storage.update_summary(height, &block_traces, total_timeouts);
 
         // store aggregated data
         build_storage.store_data(

@@ -4,7 +4,7 @@ use futures::{stream, StreamExt};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 use crate::{config::AggregatorEnvironment, error::AggregatorError, AggregatorResult};
 
@@ -110,13 +110,14 @@ async fn query_producer_internal_blocks(
 pub async fn get_most_recent_produced_blocks(
     environment: &AggregatorEnvironment,
     nodes: Nodes,
-) -> BTreeMap<String, ProducedBlock> {
+) -> (BTreeMap<String, ProducedBlock>, usize) {
     let client = reqwest::Client::new();
 
     const MAX_RETRIES: usize = 5;
     let mut retries: usize = 0;
     let mut nodes_to_query = nodes;
     let mut final_res = BTreeMap::new();
+    let mut total_timeouts = 0;
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -131,22 +132,32 @@ pub async fn get_most_recent_produced_blocks(
             })
             .buffer_unordered(environment.producer_node_count);
 
-        let collected = bodies
-            .fold(BTreeMap::new(), |mut collected, b| async {
-                match b {
-                    Ok((url, Ok(res))) => {
-                        debug!("{url} OK");
-                        collected.extend(res);
+        let (collected, timeouts): (_, usize) = bodies
+            .fold(
+                (BTreeMap::new(), 0),
+                |(mut collected, mut timeouts), b| async move {
+                    match b {
+                        Ok((_, Ok(res))) => {
+                            collected.extend(res);
+                        }
+                        Ok((tag, Err(e))) => {
+                            warn!("Error requestig {tag}, reason: {}", e);
+                            if let AggregatorError::OutgoingRpcError(reqwest_error) = e {
+                                if reqwest_error.is_timeout() {
+                                    timeouts += 1;
+                                }
+                            };
+                        }
+                        Err(e) => error!("Tokio join error: {e}"),
                     }
-                    Ok((url, Err(e))) => warn!("Error requestig {url}, reason: {}", e),
-                    Err(e) => error!("Tokio join error: {e}"),
-                }
-                collected
-            })
+                    (collected, timeouts)
+                },
+            )
             .await;
 
         final_res.extend(collected);
         nodes_to_query.retain(|k, _| !final_res.contains_key(k));
+        total_timeouts += timeouts;
 
         if final_res.len() == environment.producer_node_count {
             break;
@@ -156,9 +167,13 @@ pub async fn get_most_recent_produced_blocks(
         retries += 1;
     }
 
-    info!("Collected {} produced blocks", final_res.len());
+    info!(
+        "Collected {} produced blocks - Timeouts: {}",
+        final_res.len(),
+        total_timeouts
+    );
 
-    final_res
+    (final_res, total_timeouts)
 
     // let bodies = stream::iter(nodes)
     //     .map(|(tag, url)| {

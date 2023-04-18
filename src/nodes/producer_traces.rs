@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
-use crate::{config::AggregatorEnvironment, error::AggregatorError, AggregatorResult};
+use crate::{
+    config::AggregatorEnvironment, error::AggregatorError, nodes::RequestStats, AggregatorResult,
+};
 
 use super::{query_node, GraphqlResponse, Nodes};
 
@@ -110,14 +112,16 @@ async fn query_producer_internal_blocks(
 pub async fn get_most_recent_produced_blocks(
     environment: &AggregatorEnvironment,
     nodes: Nodes,
-) -> (BTreeMap<String, ProducedBlock>, usize) {
+) -> (BTreeMap<String, ProducedBlock>, RequestStats) {
     let client = reqwest::Client::new();
+    // let client = reqwest::Client::builder().pool_max_idle_per_host(0).build().unwrap();
 
     const MAX_RETRIES: usize = 5;
     let mut retries: usize = 0;
     let mut nodes_to_query = nodes;
     let mut final_res = BTreeMap::new();
-    let mut total_timeouts = 0;
+
+    let mut total_request_stats = RequestStats::default();
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -132,10 +136,10 @@ pub async fn get_most_recent_produced_blocks(
             })
             .buffer_unordered(environment.producer_node_count);
 
-        let (collected, timeouts): (_, usize) = bodies
+        let (collected, timeouts, requests): (_, usize, usize) = bodies
             .fold(
-                (BTreeMap::new(), 0),
-                |(mut collected, mut timeouts), b| async move {
+                (BTreeMap::new(), 0, 0),
+                |(mut collected, mut timeouts, mut requests), b| async move {
                     match b {
                         Ok((_, Ok(res))) => {
                             collected.extend(res);
@@ -150,14 +154,21 @@ pub async fn get_most_recent_produced_blocks(
                         }
                         Err(e) => error!("Tokio join error: {e}"),
                     }
-                    (collected, timeouts)
+                    requests += 1;
+                    (collected, timeouts, requests)
                 },
             )
             .await;
 
         final_res.extend(collected);
         nodes_to_query.retain(|k, _| !final_res.contains_key(k));
-        total_timeouts += timeouts;
+
+        let request_stats = RequestStats {
+            request_count: requests,
+            request_timeout_count: timeouts,
+        };
+
+        total_request_stats += request_stats;
 
         if final_res.len() == environment.producer_node_count {
             break;
@@ -170,10 +181,10 @@ pub async fn get_most_recent_produced_blocks(
     info!(
         "Collected {} produced blocks - Timeouts: {}",
         final_res.len(),
-        total_timeouts
+        total_request_stats.request_timeout_count,
     );
 
-    (final_res, total_timeouts)
+    (final_res, total_request_stats)
 
     // let bodies = stream::iter(nodes)
     //     .map(|(tag, url)| {

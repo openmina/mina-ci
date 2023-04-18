@@ -8,7 +8,7 @@ use tracing::{error, info, warn};
 
 use crate::{error::AggregatorError, AggregatorResult};
 
-use super::{query_node, GraphqlResponse, Nodes, TraceSource, TraceStatus};
+use super::{query_node, GraphqlResponse, Nodes, RequestStats, TraceSource, TraceStatus};
 
 const STRUCTURED_TRACE_PAYLOAD: &str =
     r#"{"query": "{ blockStructuredTrace(block_identifier: \"{STATE_HASH}\" ) }" }"#;
@@ -108,7 +108,7 @@ async fn query_block_traces(
 pub async fn get_block_trace_from_cluster(
     nodes: Nodes,
     state_hash: &str,
-) -> (BTreeMap<String, BlockStructuredTrace>, usize) {
+) -> (BTreeMap<String, BlockStructuredTrace>, RequestStats) {
     let client = reqwest::Client::new();
 
     const MAX_RETRIES: usize = 5;
@@ -116,7 +116,7 @@ pub async fn get_block_trace_from_cluster(
     let nodes_count = nodes.len();
     let mut nodes_to_query = nodes;
     let mut final_res: BTreeMap<String, BlockStructuredTrace> = BTreeMap::new();
-    let mut total_timeouts: usize = 0;
+    let mut total_request_stats = RequestStats::default();
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -132,10 +132,14 @@ pub async fn get_block_trace_from_cluster(
             })
             .buffer_unordered(150);
 
-        let (collected, timeouts): (BTreeMap<String, BlockStructuredTrace>, usize) = bodies
+        let (collected, timeouts, requests): (
+            BTreeMap<String, BlockStructuredTrace>,
+            usize,
+            usize,
+        ) = bodies
             .fold(
-                (BTreeMap::<String, BlockStructuredTrace>::new(), 0),
-                |(mut collected, mut timeouts), b| async move {
+                (BTreeMap::<String, BlockStructuredTrace>::new(), 0, 0),
+                |(mut collected, mut timeouts, mut requests), b| async move {
                     match b {
                         Ok((tag, Ok(res))) => {
                             collected.insert(tag, res);
@@ -150,14 +154,20 @@ pub async fn get_block_trace_from_cluster(
                         }
                         Err(e) => error!("Tokio join error: {e}"),
                     }
-                    (collected, timeouts)
+                    requests += 1;
+                    (collected, timeouts, requests)
                 },
             )
             .await;
 
         final_res.extend(collected);
-        nodes_to_query.retain(|k, _| !final_res.contains_key(k));
-        total_timeouts += timeouts;
+        nodes_to_query.retain(|k: &String, _| !final_res.contains_key(k));
+        let request_stats = RequestStats {
+            request_count: requests,
+            request_timeout_count: timeouts,
+        };
+
+        total_request_stats += request_stats;
 
         if nodes_to_query.is_empty() {
             break;
@@ -172,8 +182,8 @@ pub async fn get_block_trace_from_cluster(
         "Collected {}/{} traces - Timeouts: {}",
         final_res.len(),
         nodes_count,
-        total_timeouts
+        total_request_stats.request_timeout_count,
     );
 
-    (final_res, total_timeouts)
+    (final_res, total_request_stats)
 }

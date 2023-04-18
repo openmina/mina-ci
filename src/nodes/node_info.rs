@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
-use crate::{error::AggregatorError, AggregatorResult};
+use crate::{error::AggregatorError, nodes::RequestStats, AggregatorResult};
 
 use super::{query_node, GraphqlResponse, Nodes};
 
@@ -75,7 +75,7 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
 /// Fires requests to all the nodes and collects their IPs (requests are parallel)
 pub async fn get_node_info_from_cluster(
     nodes: Nodes,
-) -> (BTreeMap<String, DaemonStatusDataSlim>, usize) {
+) -> (BTreeMap<String, DaemonStatusDataSlim>, RequestStats) {
     let client = reqwest::Client::new();
 
     const MAX_RETRIES: usize = 5;
@@ -83,7 +83,7 @@ pub async fn get_node_info_from_cluster(
     let nodes_count = nodes.len();
     let mut nodes_to_query = nodes;
     let mut final_res = BTreeMap::new();
-    let mut total_timeouts = 0;
+    let mut total_request_stats = RequestStats::default();
 
     while retries < MAX_RETRIES {
         let bodies = stream::iter(nodes_to_query.clone())
@@ -93,10 +93,10 @@ pub async fn get_node_info_from_cluster(
             })
             .buffer_unordered(150);
 
-        let (collected, timeouts): (_, usize) = bodies
+        let (collected, timeouts, requests): (_, usize, usize) = bodies
             .fold(
-                (BTreeMap::new(), 0),
-                |(mut collected, mut timeouts), b| async move {
+                (BTreeMap::new(), 0, 0),
+                |(mut collected, mut timeouts, mut requests), b| async move {
                     match b {
                         Ok((tag, Ok(res))) => {
                             collected.insert(tag, res.into());
@@ -111,14 +111,21 @@ pub async fn get_node_info_from_cluster(
                         }
                         Err(e) => error!("Tokio join error: {e}"),
                     }
-                    (collected, timeouts)
+                    requests += 1;
+                    (collected, timeouts, requests)
                 },
             )
             .await;
 
         final_res.extend(collected);
         nodes_to_query.retain(|k, _| !final_res.contains_key(k));
-        total_timeouts += timeouts;
+
+        let request_stats = RequestStats {
+            request_count: requests,
+            request_timeout_count: timeouts,
+        };
+
+        total_request_stats += request_stats;
 
         if nodes_to_query.is_empty() {
             break;
@@ -128,9 +135,14 @@ pub async fn get_node_info_from_cluster(
         retries += 1;
     }
 
-    info!("Collected {}/{} nodes", final_res.len(), nodes_count);
+    info!(
+        "Collected {}/{} nodes - Timeouts: {}",
+        final_res.len(),
+        nodes_count,
+        total_request_stats.request_timeout_count
+    );
 
-    (final_res, total_timeouts)
+    (final_res, total_request_stats)
 
     // let bodies = stream::iter(nodes)
     //     .map(|(tag, url)| {

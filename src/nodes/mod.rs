@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::BTreeMap,
+    ops::{Add, AddAssign},
+    time::Duration,
+};
 
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
@@ -42,6 +46,30 @@ pub enum ComponentType {
 
 /// <tag, URL>
 pub type Nodes = BTreeMap<String, String>;
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct RequestStats {
+    pub request_count: usize,
+    pub request_timeout_count: usize,
+}
+
+impl Add for RequestStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            request_count: self.request_count + rhs.request_count,
+            request_timeout_count: self.request_timeout_count + rhs.request_timeout_count,
+        }
+    }
+}
+
+impl AddAssign for RequestStats {
+    fn add_assign(&mut self, rhs: Self) {
+        self.request_count += rhs.request_count;
+        self.request_timeout_count += rhs.request_timeout_count;
+    }
+}
 
 async fn query_node(
     client: reqwest::Client,

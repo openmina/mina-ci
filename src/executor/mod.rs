@@ -13,7 +13,7 @@ use crate::{
         collect_all_urls, collect_all_urls_cluster_ip, collect_producer_urls,
         collect_producer_urls_cluster_ip, get_best_chain, get_block_trace_from_cluster,
         get_most_recent_produced_blocks, get_node_info_from_cluster, get_seed_url,
-        get_seed_url_cluster_ip, ComponentType, Nodes,
+        get_seed_url_cluster_ip, ComponentType, Nodes, RequestStats,
     },
     storage::AggregatorStorage,
     AggregatorResult,
@@ -115,7 +115,7 @@ pub async fn poll_node_traces(
             continue;
         };
 
-        let mut total_timeouts: usize = 0;
+        let mut total_request_stats = RequestStats::default();
 
         // Collect urls based on wether we want to access the nodes directly (only when aggregator is running inside the cluster) or trough the proxy
         let (graphql_urls, tracing_urls, debugger_urls, producer_tracing_urls, seed_url) =
@@ -142,7 +142,7 @@ pub async fn poll_node_traces(
             get_most_recent_produced_blocks(environment, producer_tracing_urls).await;
         info!("Produced blocks collected");
 
-        total_timeouts += producer_trace_timeouts;
+        total_request_stats += producer_trace_timeouts;
 
         // Catch the case that the block producers have different height for their most recent blocks
         let height = if blocks_on_most_recent_height.is_empty() {
@@ -173,7 +173,7 @@ pub async fn poll_node_traces(
         let (node_infos, node_info_timeouts) = get_node_info_from_cluster(graphql_urls).await;
         // println!("INF: {:#?}", node_infos);
         info!("Information collected");
-        total_timeouts += node_info_timeouts;
+        total_request_stats += node_info_timeouts;
 
         // build a map that maps peer_id to tag
         let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
@@ -215,7 +215,7 @@ pub async fn poll_node_traces(
                 }
                 Err(e) => warn!("{}", e),
             }
-            total_timeouts += timeouts;
+            total_request_stats += timeouts;
             info!("Trace aggregation finished");
         }
 
@@ -260,7 +260,7 @@ pub async fn poll_node_traces(
             }
         }
 
-        build_storage.update_summary(height, &block_traces, total_timeouts);
+        build_storage.update_summary(height, &block_traces, total_request_stats);
 
         // store aggregated data
         build_storage.store_data(

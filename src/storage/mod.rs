@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     aggregators::{AggregatedBlockTraces, BlockHash, CpnpBlockPublication},
     cross_validation::ValidationReport,
+    nodes::RequestStats,
 };
 
 pub type IpcAggregatorStorage = BTreeMap<usize, BTreeMap<BlockHash, CpnpBlockPublication>>;
@@ -93,7 +94,7 @@ impl BuildStorage {
         &mut self,
         height: usize,
         block_traces: &AggregatedBlockTraces,
-        timeouts: usize,
+        request_stats: RequestStats,
     ) {
         // per block summaries
         self.block_summaries
@@ -103,7 +104,8 @@ impl BuildStorage {
             self.helpers.tx_count_per_block.insert(block_hash, tx_count);
         }
 
-        self.build_summary.request_timeout_count += timeouts;
+        self.build_summary.request_timeout_count += request_stats.request_timeout_count;
+        self.build_summary.request_count += request_stats.request_count;
 
         self.build_summary.tx_count = self
             .helpers
@@ -335,6 +337,7 @@ pub struct BuildSummary {
     pub block_production_regression: bool,
     pub block_application_regression: bool,
     pub receive_latency_regression: bool,
+    pub request_count: usize,
     pub request_timeout_count: usize,
     // #[serde(skip)]
     // pub avg_total_count: usize,
@@ -491,6 +494,7 @@ fn f64_max(values: &[f64]) -> f64 {
 mod tests {
     use crate::{
         aggregators::{AggregatedBlockTraces, BlockTraceAggregatorReport},
+        nodes::RequestStats,
         storage::BuildStorage,
     };
 
@@ -546,7 +550,7 @@ mod tests {
 
         storage.best_chain.insert(1, "Height1Block1".to_string());
 
-        storage.update_summary(height, &block_traces, 0);
+        storage.update_summary(height, &block_traces, RequestStats::default());
 
         // check min, max and average calculations
 
@@ -648,7 +652,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.update_summary(height, &block_traces, 0);
+        storage.update_summary(height, &block_traces, RequestStats::default());
         storage.store_data(height, block_traces, Default::default(), Default::default());
 
         // height 2 block 1
@@ -701,7 +705,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.update_summary(height, &block_traces, 0);
+        storage.update_summary(height, &block_traces, RequestStats::default());
 
         // check min, max and average calculations
         // production times
@@ -822,7 +826,7 @@ mod tests {
 
         block_traces.insert(block_hash, raw_traces);
 
-        storage.update_summary(height, &block_traces, 0);
+        storage.update_summary(height, &block_traces, RequestStats::default());
         storage.store_data(height, block_traces, Default::default(), Default::default());
 
         // height 2 block 1
@@ -938,7 +942,7 @@ mod tests {
         storage.best_chain.insert(1, "Height1Block1".to_string());
         storage.best_chain.insert(2, "Height2Block2".to_string());
 
-        storage.update_summary(height, &block_traces, 0);
+        storage.update_summary(height, &block_traces, RequestStats::default());
 
         // check min, max and average calculations
         // production times

@@ -79,7 +79,7 @@ pub struct AggregateValidationReport {
 }
 
 // TODO: unwraps
-pub fn cross_validate_ipc_with_traces(
+pub fn _cross_validate_ipc_with_traces(
     traces: AggregatedBlockTraces,
     ipc_reports: BTreeMap<BlockHash, CpnpBlockPublication>,
     height: usize,

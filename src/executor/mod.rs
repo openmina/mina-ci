@@ -4,9 +4,8 @@ use tokio::time::sleep;
 use tracing::{info, instrument, warn};
 
 use crate::{
-    aggregators::{aggregate_block_traces, aggregate_first_receive},
+    aggregators::aggregate_block_traces,
     config::AggregatorEnvironment,
-    cross_validation::cross_validate_ipc_with_traces,
     debugger_data::{CpnpCapturedData, DebuggerCpnpResponse},
     executor::state::AggregatorStateInner,
     nodes::{
@@ -33,7 +32,7 @@ async fn pull_debugger_data_cpnp(
 
     for (tag, url) in nodes.iter() {
         // info!("Pulling {}", url);
-        match get_height_data_cpnp(height, url, environment).await {
+        match _get_height_data_cpnp(height, url, environment).await {
             Ok(data) => {
                 let modified_data = data
                     .into_iter()
@@ -52,7 +51,7 @@ async fn pull_debugger_data_cpnp(
     collected
 }
 
-async fn get_height_data_cpnp(
+async fn _get_height_data_cpnp(
     height: Option<usize>,
     base_url: &str,
     environment: &AggregatorEnvironment,
@@ -118,7 +117,7 @@ pub async fn poll_node_traces(
         let mut total_request_stats = RequestStats::default();
 
         // Collect urls based on wether we want to access the nodes directly (only when aggregator is running inside the cluster) or trough the proxy
-        let (graphql_urls, tracing_urls, debugger_urls, producer_tracing_urls, seed_url) =
+        let (graphql_urls, tracing_urls, _debugger_urls, producer_tracing_urls, seed_url) =
             if environment.use_internal_endpoints {
                 (
                     collect_all_urls_cluster_ip(&build_nodes, ComponentType::Graphql),
@@ -175,24 +174,25 @@ pub async fn poll_node_traces(
         info!("Information collected");
         total_request_stats += node_info_timeouts;
 
+        // TODO: REENABLE DEBUGGER DATA
         // build a map that maps peer_id to tag
-        let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
-            .iter()
-            .map(|(k, v)| {
-                (
-                    v.daemon_status.addrs_and_ports.peer.peer_id.clone(),
-                    k.to_string(),
-                )
-            })
-            .collect();
+        // let peer_id_to_tag_map: BTreeMap<String, String> = node_infos
+        //     .iter()
+        //     .map(|(k, v)| {
+        //         (
+        //             v.daemon_status.addrs_and_ports.peer.peer_id.clone(),
+        //             k.to_string(),
+        //         )
+        //     })
+        //     .collect();
 
-        let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height
-            .iter()
-            .map(|(tag, produced_block)| {
-                // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
-                (tag.to_string(), produced_block.state_hash.clone())
-            })
-            .collect();
+        // let tag_to_block_hash_map: BTreeMap<String, String> = blocks_on_most_recent_height
+        //     .iter()
+        //     .map(|(tag, produced_block)| {
+        //         // let peer_id = tag_to_peer_id_map.get(tag).unwrap();
+        //         (tag.to_string(), produced_block.state_hash.clone())
+        //     })
+        //     .collect();
 
         // Optimization, only grab traces once for the same block hash
         // blocks_on_most_recent_height.sort_unstable();
@@ -219,26 +219,27 @@ pub async fn poll_node_traces(
             info!("Trace aggregation finished");
         }
 
+        // TODO: REENABLE DEBUGGER DATA
         // TODO: move this to a separate thread?
-        info!("Polling debuggers for height {height}");
+        // info!("Polling debuggers for height {height}");
 
-        let ipc_data = pull_debugger_data_cpnp(Some(height), environment, debugger_urls).await;
+        // let ipc_data = pull_debugger_data_cpnp(Some(height), environment, debugger_urls).await;
 
-        let (_, aggregated_ipc_data) =
-            match aggregate_first_receive(ipc_data, &peer_id_to_tag_map, &tag_to_block_hash_map) {
-                Ok((height, aggregate_data)) => (height, aggregate_data),
-                Err(e) => {
-                    warn!("{}", e);
-                    (height, Default::default())
-                }
-            };
+        // let (_, aggregated_ipc_data) =
+        //     match aggregate_first_receive(ipc_data, &peer_id_to_tag_map, &tag_to_block_hash_map) {
+        //         Ok((height, aggregate_data)) => (height, aggregate_data),
+        //         Err(e) => {
+        //             warn!("{}", e);
+        //             (height, Default::default())
+        //         }
+        //     };
 
-        // also do the cross_validation
-        let cross_validation_report = cross_validate_ipc_with_traces(
-            block_traces.clone(),
-            aggregated_ipc_data.clone(),
-            height,
-        );
+        // // also do the cross_validation
+        // let cross_validation_report = cross_validate_ipc_with_traces(
+        //     block_traces.clone(),
+        //     aggregated_ipc_data.clone(),
+        //     height,
+        // );
 
         info!("Updating best chain");
         match get_best_chain(&seed_url).await {
@@ -266,8 +267,8 @@ pub async fn poll_node_traces(
         build_storage.store_data(
             height,
             block_traces,
-            aggregated_ipc_data,
-            cross_validation_report,
+            BTreeMap::new(), // TODO: REENABLE DEBUGGER DATA
+            BTreeMap::new(), // TODO: REENABLE DEBUGGER DATA
         );
         let _ = storage.insert(build_number, build_storage);
     }

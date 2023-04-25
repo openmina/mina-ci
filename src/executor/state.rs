@@ -29,7 +29,7 @@ pub async fn poll_drone(
     loop {
         sleep(environment.data_pull_interval).await;
 
-        match query_latest_build().await {
+        match query_latest_build(environment).await {
             Ok(build) => {
                 // println!("BUILD: {:#?}", build);
                 if let Ok(mut write_locked_state) = state.write() {
@@ -67,8 +67,8 @@ pub async fn poll_drone(
     }
 }
 
-pub async fn query_latest_build() -> AggregatorResult<BuildInfo> {
-    let url = "https://ci.openmina.com/api/repos/openmina/mina/builds?per_page=1";
+pub async fn query_latest_build(environment: &AggregatorEnvironment) -> AggregatorResult<BuildInfo> {
+    let url = format!("{}/repos/openmina/{}/builds?per_page=1", environment.ci_api_url, environment.ci_repo);
     let client = reqwest::Client::new();
 
     let res: Vec<BuildInfo> = client

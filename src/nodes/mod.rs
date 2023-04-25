@@ -1,4 +1,8 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    ops::{Add, AddAssign},
+    time::Duration,
+};
 
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
@@ -14,6 +18,9 @@ pub use producer_traces::*;
 pub mod node_block_traces;
 pub use node_block_traces::*;
 
+pub mod best_chain;
+pub use best_chain::*;
+
 const PLAIN_NODE_COMPONENT: &str = "node";
 const SEED_NODE_COMPONENT: &str = "seed";
 const PRODUCER_NODE_COMPONENT: &str = "prod";
@@ -22,6 +29,9 @@ const SNARKER_NODE_COMPONENT: &str = "snarker";
 
 const DEBUGGER_COMPONENT: &str = "bpf-debugger";
 const GRAPHQL_COMPONENT: &str = "graphql";
+const INTERNAL_TRACING_COMPONENT: &str = "internal-trace/graphql";
+
+pub type BuildNodes = BTreeMap<String, DaemonStatusDataSlim>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GraphqlResponse<T> {
@@ -31,10 +41,35 @@ pub struct GraphqlResponse<T> {
 pub enum ComponentType {
     Graphql,
     Debugger,
+    InternalTracing,
 }
 
 /// <tag, URL>
 pub type Nodes = BTreeMap<String, String>;
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct RequestStats {
+    pub request_count: usize,
+    pub request_timeout_count: usize,
+}
+
+impl Add for RequestStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            request_count: self.request_count + rhs.request_count,
+            request_timeout_count: self.request_timeout_count + rhs.request_timeout_count,
+        }
+    }
+}
+
+impl AddAssign for RequestStats {
+    fn add_assign(&mut self, rhs: Self) {
+        self.request_count += rhs.request_count;
+        self.request_timeout_count += rhs.request_timeout_count;
+    }
+}
 
 async fn query_node(
     client: reqwest::Client,
@@ -45,6 +80,7 @@ async fn query_node(
         .post(url)
         .body(payload)
         .header("Content-Type", "application/json")
+        .timeout(Duration::from_secs(5))
         .send()
         .await?)
 }
@@ -60,6 +96,7 @@ pub fn collect_all_urls(
     let component = match component_type {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
     };
 
     for seed_index in 1..=environment.seed_node_count {
@@ -69,12 +106,12 @@ pub fn collect_all_urls(
     }
 
     // producer nodes
-    let producers = collect_producer_urls(environment, &component_type);
+    let producers = collect_producer_urls(environment, component_type);
     res.extend(producers);
 
     // snarker nodes
     for snarker_index in 1..=environment.snarker_node_count {
-        let snarker_label = format!("{}{}", SNARKER_NODE_COMPONENT, snarker_index);
+        let snarker_label = format!("{}{snarker_index:0>3}", SNARKER_NODE_COMPONENT);
         let url = format!("{}/{}/{}", cluster_base_url, snarker_label, component);
         res.insert(snarker_label, url);
     }
@@ -106,10 +143,26 @@ pub fn collect_all_urls(
     res
 }
 
-fn collect_producer_urls(environment: &AggregatorEnvironment, component: &ComponentType) -> Nodes {
+pub fn get_seed_url(environment: &AggregatorEnvironment, component_type: ComponentType) -> String {
+    let component = match component_type {
+        ComponentType::Graphql => GRAPHQL_COMPONENT,
+        ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
+    };
+
+    let cluster_base_url = environment.cluster_base_url.to_string();
+    let seed_label = format!("{}{}", SEED_NODE_COMPONENT, 1);
+    format!("{}/{}/{}", cluster_base_url, seed_label, component)
+}
+
+pub fn collect_producer_urls(
+    environment: &AggregatorEnvironment,
+    component: ComponentType,
+) -> Nodes {
     let component = match component {
         ComponentType::Graphql => GRAPHQL_COMPONENT,
         ComponentType::Debugger => DEBUGGER_COMPONENT,
+        ComponentType::InternalTracing => INTERNAL_TRACING_COMPONENT,
     };
 
     let cluster_base_url = environment.cluster_base_url.to_string();
@@ -123,4 +176,73 @@ fn collect_producer_urls(environment: &AggregatorEnvironment, component: &Compon
         res.insert(producer_label, url);
     }
     res
+}
+
+pub fn collect_producer_urls_cluster_ip(
+    build_nodes: &BuildNodes,
+    component_type: ComponentType,
+) -> Nodes {
+    let (component, port) = match component_type {
+        // TODO: rework
+        ComponentType::Graphql => ("/graphql", "3085"),
+        ComponentType::Debugger => ("", "80"),
+        ComponentType::InternalTracing => ("/graphql", "8000"),
+    };
+
+    build_nodes
+        .iter()
+        .filter(|(tag, _)| tag.contains("prod"))
+        .map(|(tag, data)| {
+            // TODO: get the port form the environmnet(inlcude in chart?)
+            let url = format!(
+                "http://{}:{port}{component}",
+                data.daemon_status.addrs_and_ports.external_ip
+            );
+            (tag.clone(), url)
+        })
+        .collect()
+}
+
+pub fn get_seed_url_cluster_ip(build_nodes: &BuildNodes, component_type: ComponentType) -> String {
+    let (component, port) = match component_type {
+        // TODO: rework
+        ComponentType::Graphql => ("/graphql", "3085"),
+        ComponentType::Debugger => ("", "80"),
+        ComponentType::InternalTracing => ("/graphql", "8000"),
+    };
+
+    build_nodes
+        .iter()
+        .find(|(tag, _)| tag.contains("seed1"))
+        .map(|(_, data)| {
+            format!(
+                "http://{}:{port}{component}",
+                data.daemon_status.addrs_and_ports.external_ip
+            )
+        })
+        .unwrap_or_default()
+}
+
+pub fn collect_all_urls_cluster_ip(
+    build_nodes: &BuildNodes,
+    component_type: ComponentType,
+) -> Nodes {
+    let (component, port) = match component_type {
+        // TODO: rework
+        ComponentType::Graphql => ("/graphql", "3085"),
+        ComponentType::Debugger => ("", "80"),
+        ComponentType::InternalTracing => ("/graphql", "8000"),
+    };
+
+    build_nodes
+        .iter()
+        .map(|(tag, data)| {
+            // TODO: get the port form the environmnet(inlcude in chart?)
+            let url = format!(
+                "http://{}:{port}{component}",
+                data.daemon_status.addrs_and_ports.external_ip
+            );
+            (tag.clone(), url)
+        })
+        .collect()
 }

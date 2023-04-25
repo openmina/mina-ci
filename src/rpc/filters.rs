@@ -48,6 +48,7 @@ fn build_summary(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("builds" / usize)
         .and(warp::get())
+        .and(warp::query::<BuildsQueryOptions>())
         .and(with_storage(storage))
         .and_then(get_build_summary)
 }

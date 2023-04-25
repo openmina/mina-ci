@@ -1,16 +1,14 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use futures::{stream, StreamExt};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
-use crate::{
-    config::AggregatorEnvironment,
-    nodes::{collect_all_urls, ComponentType},
-    AggregatorResult,
-};
+use crate::{error::AggregatorError, nodes::RequestStats, AggregatorResult};
 
-use super::{query_node, GraphqlResponse};
+use super::{query_node, GraphqlResponse, Nodes};
 
 const NODE_INFO_PAYLOAD: &str = r#"{"query": "{ daemonStatus { addrsAndPorts { externalIp, peer { peerId } } syncStatus metrics { transactionPoolSize transactionsAddedToPool transactionPoolDiffReceived transactionPoolDiffBroadcasted } } snarkPool { prover } }" }"#;
 
@@ -40,7 +38,7 @@ pub struct SnarkPoolElement {
     pub prover: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DaemonMetrics {
     pub transaction_pool_size: usize,
@@ -73,49 +71,114 @@ impl From<DaemonStatusData> for DaemonStatusDataSlim {
     }
 }
 
-#[instrument]
+#[instrument(skip(nodes))]
 /// Fires requests to all the nodes and collects their IPs (requests are parallel)
 pub async fn get_node_info_from_cluster(
-    environment: &AggregatorEnvironment,
-) -> BTreeMap<String, DaemonStatusDataSlim> {
+    nodes: Nodes,
+) -> (BTreeMap<String, DaemonStatusDataSlim>, RequestStats) {
     let client = reqwest::Client::new();
 
-    let urls = collect_all_urls(environment, ComponentType::Graphql);
-    // println!("URLS: {:#?}", urls);
-    let bodies = stream::iter(urls)
-        .map(|(tag, url)| {
-            let client = client.clone();
-            tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
-        })
-        .buffer_unordered(150);
+    const MAX_RETRIES: usize = 5;
+    let mut retries: usize = 0;
+    let nodes_count = nodes.len();
+    let mut nodes_to_query = nodes;
+    let mut final_res = BTreeMap::new();
+    let mut total_request_stats = RequestStats::default();
 
-    let collected = bodies
-        .fold(BTreeMap::new(), |mut collected, b| async {
-            match b {
-                Ok((tag, Ok(res))) => {
-                    // info!("{tag} OK");
-                    collected.insert(tag, res.into());
-                }
-                Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
-                Err(e) => error!("Tokio join error: {e}"),
-            }
-            collected
-        })
-        .await;
+    while retries < MAX_RETRIES {
+        let bodies = stream::iter(nodes_to_query.clone())
+            .map(|(tag, url)| {
+                let client = client.clone();
+                tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
+            })
+            .buffer_unordered(150);
 
-    info!("Collected {} nodes", collected.len());
+        let (collected, timeouts, requests): (_, usize, usize) = bodies
+            .fold(
+                (BTreeMap::new(), 0, 0),
+                |(mut collected, mut timeouts, mut requests), b| async move {
+                    match b {
+                        Ok((tag, Ok(res))) => {
+                            collected.insert(tag, res.into());
+                        }
+                        Ok((tag, Err(e))) => {
+                            warn!("Error requestig {tag}, reason: {}", e);
+                            if let AggregatorError::OutgoingRpcError(reqwest_error) = e {
+                                if reqwest_error.is_timeout() {
+                                    timeouts += 1;
+                                }
+                            };
+                        }
+                        Err(e) => error!("Tokio join error: {e}"),
+                    }
+                    requests += 1;
+                    (collected, timeouts, requests)
+                },
+            )
+            .await;
 
-    // println!("TAGS COLLECTED: {:#?}", collected.keys());
-    // println!("IPS COLLECTED: {:#?}", collected.values());
+        final_res.extend(collected);
+        nodes_to_query.retain(|k, _| !final_res.contains_key(k));
 
-    collected
+        let request_stats = RequestStats {
+            request_count: requests,
+            request_timeout_count: timeouts,
+        };
+
+        total_request_stats += request_stats;
+
+        if nodes_to_query.is_empty() {
+            break;
+        }
+
+        sleep(Duration::from_secs(1)).await;
+        retries += 1;
+    }
+
+    info!(
+        "Collected {}/{} nodes - Timeouts: {}",
+        final_res.len(),
+        nodes_count,
+        total_request_stats.request_timeout_count
+    );
+
+    (final_res, total_request_stats)
+
+    // let bodies = stream::iter(nodes)
+    //     .map(|(tag, url)| {
+    //         let client = client.clone();
+    //         tokio::spawn(async move { (tag.clone(), query_node_info(client, &url).await) })
+    //     })
+    //     .buffer_unordered(150);
+
+    // let collected = bodies
+    //     .fold(BTreeMap::new(), |mut collected, b| async {
+    //         match b {
+    //             Ok((tag, Ok(res))) => {
+    //                 // info!("{tag} OK");
+    //                 collected.insert(tag, res.into());
+    //             }
+    //             Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
+    //             Err(e) => error!("Tokio join error: {e}"),
+    //         }
+    //         collected
+    //     })
+    //     .await;
+
+    // info!("Collected {} nodes", collected.len());
+
+    // collected
 }
 
 async fn query_node_info(client: reqwest::Client, url: &str) -> AggregatorResult<DaemonStatusData> {
-    let res: GraphqlResponse<DaemonStatusData> =
-        query_node(client, url, NODE_INFO_PAYLOAD.to_string())
-            .await?
-            .json()
-            .await?;
-    Ok(res.data)
+    let res = query_node(client, url, NODE_INFO_PAYLOAD.to_string()).await?;
+    let status = res.status();
+
+    if status != StatusCode::OK {
+        return Err(AggregatorError::RpcServerError { status });
+    }
+
+    let res_json: GraphqlResponse<DaemonStatusData> = res.json().await?;
+
+    Ok(res_json.data)
 }

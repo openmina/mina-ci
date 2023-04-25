@@ -21,6 +21,7 @@ pub struct QueryOptions {
 #[allow(dead_code)]
 pub struct BuildsQueryOptions {
     status: Option<String>,
+    compare_to: Option<usize>,
 }
 
 impl BuildsQueryOptions {
@@ -117,8 +118,13 @@ pub async fn get_aggregated_block_trace_data(
     };
 
     if let Some(data) = block_trace_storage.get(&height) {
-        let res: Vec<BlockTraceAggregatorReport> =
-            data.values().cloned().into_iter().flatten().collect();
+        let res: Vec<BlockTraceAggregatorReport> = data
+            .inner()
+            .values()
+            .cloned()
+            .into_iter()
+            .flatten()
+            .collect();
         Ok(warp::reply::with_status(
             warp::reply::json(&res),
             StatusCode::OK,
@@ -145,8 +151,13 @@ pub async fn get_aggregated_block_trace_data_latest(
     };
 
     if let Some((_, data)) = block_trace_storage.last_key_value() {
-        let res: Vec<BlockTraceAggregatorReport> =
-            data.values().cloned().into_iter().flatten().collect();
+        let res: Vec<BlockTraceAggregatorReport> = data
+            .inner()
+            .values()
+            .cloned()
+            .into_iter()
+            .flatten()
+            .collect();
         Ok(warp::reply::with_status(
             warp::reply::json(&res),
             StatusCode::OK,
@@ -267,89 +278,61 @@ pub async fn get_build_summaries(
     options: BuildsQueryOptions,
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    let status_filter = match options.status_filters() {
-        Some(filter) => filter,
-        // Only retrieve success builds when no filter is aplied
-        None => vec!["success".to_string()],
-    };
-
     match storage.get_values() {
         Ok(values) => {
-            let res: Vec<BuildStorage> = values
-                .into_iter()
-                .rev()
-                .filter(|build| status_filter.contains(&build.build_info.status))
-                .map(|mut build| {
-                    build.build_summary.application_times = build
-                        .helpers
-                        .application_times
-                        .values()
-                        .flatten()
-                        .cloned()
+            let final_res = match options.status_filters() {
+                Some(filter) => {
+                    let res: Vec<BuildStorage> = values
+                        .into_iter()
+                        .rev()
+                        .filter(|build| filter.contains(&build.build_info.status))
+                        .map(|mut build| {
+                            build.include_times();
+                            build
+                        })
                         .collect();
-                    build.build_summary.production_times = build
-                        .helpers
-                        .production_times
-                        .values()
-                        .flatten()
-                        .cloned()
+                    let last_value = res.last().cloned().unwrap_or_default();
+                    // calculate deltas
+                    let mut final_res: Vec<BuildStorage> = res
+                        .into_iter()
+                        .tuple_windows::<(BuildStorage, BuildStorage)>()
+                        .map(|(mut w0, w1)| {
+                            w0.calculate_deltas(&w1);
+                            w0
+                        })
                         .collect();
-                    build.build_summary.receive_latencies = build
-                        .helpers
-                        .receive_latencies
-                        .values()
-                        .flatten()
-                        .cloned()
+                    // add the last value as is (nothing to comapre to)
+                    final_res.push(last_value);
+                    final_res
+                }
+                // Without status filter, return the two most recent successfull builds
+                None => {
+                    let res: Vec<BuildStorage> = values
+                        .into_iter()
+                        .rev()
+                        .filter(|build| build.build_info.status == "success")
+                        .take(2)
+                        .map(|mut build| {
+                            build.include_times();
+                            build
+                        })
                         .collect();
-                    build
-                })
-                .collect();
-            let last_value = res.last().cloned().unwrap_or_default();
-            // calculate deltas
-            let mut final_res: Vec<BuildStorage> = res
-                .into_iter()
-                .tuple_windows::<(BuildStorage, BuildStorage)>()
-                .map(|(mut w0, w1)| {
-                    w0.build_summary.block_application_avg_delta =
-                        w1.build_summary.block_application_avg
-                            - w0.build_summary.block_application_avg;
-                    w0.build_summary.block_application_max_delta =
-                        w1.build_summary.block_application_max
-                            - w0.build_summary.block_application_max;
-                    w0.build_summary.block_application_min_delta =
-                        w1.build_summary.block_application_min
-                            - w0.build_summary.block_application_min;
-                    w0.build_summary.block_application_regression = w0.build_summary.block_application_max_delta.is_sign_positive();
+                    let last_value = res.last().cloned().unwrap_or_default();
+                    // calculate deltas
+                    let mut final_res: Vec<BuildStorage> = res
+                        .into_iter()
+                        .tuple_windows::<(BuildStorage, BuildStorage)>()
+                        .map(|(mut w0, w1)| {
+                            w0.calculate_deltas(&w1);
+                            w0
+                        })
+                        .collect();
+                    // add the last value as is (nothing to comapre to)
+                    final_res.push(last_value);
+                    final_res
+                }
+            };
 
-                    w0.build_summary.block_production_avg_delta =
-                        w1.build_summary.block_production_avg
-                            - w0.build_summary.block_production_avg;
-                    w0.build_summary.block_production_max_delta =
-                        w1.build_summary.block_production_max
-                            - w0.build_summary.block_production_max;
-                    w0.build_summary.block_production_min_delta =
-                        w1.build_summary.block_production_min
-                            - w0.build_summary.block_production_min;
-                    w0.build_summary.block_production_regression = w0.build_summary.block_production_max_delta.is_sign_positive();
-
-                    w0.build_summary.receive_latency_avg_delta =
-                        w1.build_summary.receive_latency_avg - w0.build_summary.receive_latency_avg;
-                    w0.build_summary.receive_latency_max_delta =
-                        w1.build_summary.receive_latency_max - w0.build_summary.receive_latency_max;
-                    w0.build_summary.receive_latency_min_delta =
-                        w1.build_summary.receive_latency_min - w0.build_summary.receive_latency_min;
-                    w0.build_summary.receive_latency_regression = w0.build_summary.receive_latency_max_delta.is_sign_positive();
-
-                    w0.build_summary.application_times_previous =
-                        w1.build_summary.application_times;
-                    w0.build_summary.production_times_previous = w1.build_summary.production_times;
-                    w0.build_summary.receive_latencies_previous =
-                        w1.build_summary.receive_latencies;
-                    w0
-                })
-                .collect();
-            // add the last value as is (nothing to comapre to)
-            final_res.push(last_value);
             Ok(warp::reply::with_status(
                 warp::reply::json(&final_res),
                 StatusCode::OK,
@@ -364,40 +347,37 @@ pub async fn get_build_summaries(
 
 pub async fn get_build_summary(
     build_num: usize,
+    options: BuildsQueryOptions,
     storage: AggregatorStorage,
 ) -> Result<impl warp::Reply, warp::reject::Rejection> {
-    match storage.get(build_num) {
-        Ok(Some(mut build)) => {
-            build.build_summary.application_times = build
-                .helpers
-                .application_times
-                .values()
-                .flatten()
-                .cloned()
-                .collect();
-            build.build_summary.production_times = build
-                .helpers
-                .production_times
-                .values()
-                .flatten()
-                .cloned()
-                .collect();
-            build.build_summary.receive_latencies = build
-                .helpers
-                .receive_latencies
-                .values()
-                .flatten()
-                .cloned()
-                .collect();
-            Ok(warp::reply::with_status(
-                warp::reply::json(&vec![build]),
+    match options.compare_to {
+        Some(compare_to) => match (storage.get(build_num), storage.get(compare_to)) {
+            (Ok(Some(mut build)), Ok(Some(build_to_compare_to))) => {
+                build.include_times();
+                build.calculate_deltas(&build_to_compare_to);
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&vec![build, build_to_compare_to]),
+                    StatusCode::OK,
+                ))
+            }
+            _ => Ok(warp::reply::with_status(
+                warp::reply::json(&Vec::<BuildStorage>::new()),
                 StatusCode::OK,
-            ))
-        }
-        _ => Ok(warp::reply::with_status(
-            warp::reply::json(&Vec::<BuildStorage>::new()),
-            StatusCode::OK,
-        )),
+            )),
+        },
+        None => match storage.get(build_num) {
+            Ok(Some(mut build)) => {
+                build.include_times();
+                Ok(warp::reply::with_status(
+                    warp::reply::json(&vec![build]),
+                    StatusCode::OK,
+                ))
+            }
+            _ => Ok(warp::reply::with_status(
+                warp::reply::json(&Vec::<BuildStorage>::new()),
+                StatusCode::OK,
+            )),
+        },
     }
 }
 

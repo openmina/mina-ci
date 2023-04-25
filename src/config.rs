@@ -1,4 +1,4 @@
-use std::{env, time::Duration};
+use std::{env, fmt::Display, time::Duration};
 
 const LIBP2P_IPC_URL_COMPONENT_DEFAULT: &str = "libp2p_ipc/block";
 // const OUTPUT_PATH: &str = "output";
@@ -27,6 +27,43 @@ pub struct AggregatorEnvironment {
     pub remote_storage_user: String,
     pub remote_storage_password: String,
     pub remote_storage_path: String,
+    pub use_internal_endpoints: bool,
+    pub disable_aggregation: bool,
+}
+
+impl Display for AggregatorEnvironment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "\n\tplain_node_count: {}", self.plain_node_count)?;
+        writeln!(f, "\tseed_node_count: {}", self.seed_node_count)?;
+        writeln!(f, "\tproducer_node_count: {}", self.producer_node_count)?;
+        writeln!(f, "\tsnarker_node_count: {}", self.snarker_node_count)?;
+        writeln!(
+            f,
+            "\tdata_pull_interval: {}",
+            self.data_pull_interval.as_secs()
+        )?;
+        writeln!(f, "\trpc_port: {}", self.rpc_port)?;
+        writeln!(f, "\tcluster_base_url: {}", self.cluster_base_url)?;
+        writeln!(f, "\tci_api_url: {}", self.ci_api_url)?;
+        writeln!(f, "\tremote_storage_url: {}", self.remote_storage_url)?;
+        writeln!(f, "\tremote_storage_path: {}", self.remote_storage_path)?;
+        writeln!(
+            f,
+            "\tuse_internal_endpoints: {}",
+            self.use_internal_endpoints
+        )?;
+        writeln!(f, "\tdisable_aggregation: {}", self.disable_aggregation)
+    }
+}
+
+impl AggregatorEnvironment {
+    pub fn total_node_count(&self) -> usize {
+        self.seed_node_count
+            + self.plain_node_count
+            + self.producer_node_count
+            + self.snarker_node_count
+            + self.transaction_generator_node_count
+    }
 }
 
 pub fn set_environment() -> AggregatorEnvironment {
@@ -83,6 +120,9 @@ pub fn set_environment() -> AggregatorEnvironment {
     let remote_storage_path =
         env::var("REMOTE_STORAGE_PATH").unwrap_or_else(|_| REMOTE_STORAGE_PATH.to_string());
 
+    let use_internal_endpoints = env::var("USE_INTERNAL_ENDPOINTS").is_ok();
+    let disable_aggregation = env::var("DISABLE_AGGREGATION").is_ok();
+
     AggregatorEnvironment {
         plain_node_count,
         seed_node_count,
@@ -98,5 +138,7 @@ pub fn set_environment() -> AggregatorEnvironment {
         remote_storage_user,
         remote_storage_password,
         remote_storage_path,
+        use_internal_endpoints,
+        disable_aggregation,
     }
 }

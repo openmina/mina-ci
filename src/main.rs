@@ -3,7 +3,10 @@ use tokio::signal;
 use tracing::info;
 
 use crate::{
-    executor::{poll_node_traces, state::poll_drone},
+    executor::{
+        poll_node_traces,
+        state::{poll_drone, poll_info_from_cluster},
+    },
     storage::RemoteStorage,
 };
 
@@ -31,30 +34,55 @@ async fn main() {
         &environment.remote_storage_path,
     );
 
-    // let aggregator_storage = LockedBTreeMap::new();
-    // let (state, aggregator_storage) = load_storage("storage.json");
-    // let (state, aggregator_storage) = load_storage_remote();
+    info!("Starting aggregator with configuration: {environment}");
+
     let (state, aggregator_storage) = remote_storage.load_storage();
 
-    let mut t_aggregator_storage = aggregator_storage.clone();
-    let t_state = state.clone();
-    let t_environment = environment.clone();
-    let t_remote_storage = remote_storage.clone();
-    let drone_handle = tokio::spawn(async move {
-        poll_drone(
-            &t_state,
-            &t_environment,
-            &mut t_aggregator_storage,
-            &t_remote_storage,
-        )
-        .await
-    });
+    let (node_info_handle, drone_handle, aggregator_handle) = if !environment.disable_aggregation {
+        let node_info_handle = if environment.use_internal_endpoints {
+            info!("Creating ip retrieval thread");
+            let t_state = state.clone();
+            let t_environment = environment.clone();
 
-    let mut t_aggregator_storage = aggregator_storage.clone();
-    let t_environment = environment.clone();
-    let aggregator_handle = tokio::spawn(async move {
-        poll_node_traces(&state, &mut t_aggregator_storage, &t_environment).await
-    });
+            let handle =
+                tokio::spawn(async move { poll_info_from_cluster(&t_environment, &t_state).await });
+
+            Some(handle)
+        } else {
+            None
+        };
+
+        let mut t_aggregator_storage = aggregator_storage.clone();
+        let t_state = state.clone();
+        let t_environment = environment.clone();
+        let t_remote_storage = remote_storage.clone();
+        info!("Creating drone polling thread");
+        let drone_handle = tokio::spawn(async move {
+            poll_drone(
+                &t_state,
+                &t_environment,
+                &mut t_aggregator_storage,
+                &t_remote_storage,
+            )
+            .await
+        });
+
+        let mut t_aggregator_storage = aggregator_storage.clone();
+        let t_environment = environment.clone();
+
+        info!("Creating aggregator thread");
+        let aggregator_handle = tokio::spawn(async move {
+            poll_node_traces(&state, &mut t_aggregator_storage, &t_environment).await
+        });
+        (
+            node_info_handle,
+            Some(drone_handle),
+            Some(aggregator_handle),
+        )
+    } else {
+        info!("Aggregation dissabled! Only serving data");
+        (None, None, None)
+    };
 
     info!("Creating rpc server");
     let t_aggregator_storage = aggregator_storage.clone();
@@ -78,7 +106,11 @@ async fn main() {
     // remote_storage.upload_storage(&data).unwrap();
     remote_storage.save_storage(&aggregator_storage);
 
+    info!("Destroying threads");
+    drop(node_info_handle);
     drop(drone_handle);
     drop(aggregator_handle);
     drop(rpc_server_handle);
+
+    info!("Shutdown successfull!");
 }

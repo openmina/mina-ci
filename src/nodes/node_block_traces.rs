@@ -1,14 +1,14 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use futures::{stream, StreamExt};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tokio::time::sleep;
+use tracing::{error, info, warn};
 
-use crate::{config::AggregatorEnvironment, AggregatorResult};
+use crate::{error::AggregatorError, AggregatorResult};
 
-use super::{
-    collect_all_urls, query_node, ComponentType, GraphqlResponse, TraceSource, TraceStatus,
-};
+use super::{query_node, GraphqlResponse, Nodes, RequestStats, TraceSource, TraceStatus};
 
 const STRUCTURED_TRACE_PAYLOAD: &str =
     r#"{"query": "{ blockStructuredTrace(block_identifier: \"{STATE_HASH}\" ) }" }"#;
@@ -22,7 +22,7 @@ pub struct BlockStructuredTraceData {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockStructuredTrace {
     pub source: TraceSource,
-    pub blockchain_length_int: i64,
+    pub blockchain_length: i64,
     // pub global_slot: String,
     pub status: TraceStatus,
     pub total_time: f64,
@@ -53,6 +53,24 @@ pub struct BlockStructuredTraceMetadata {
     pub creator: Option<String>,
     pub winner: Option<String>,
     pub coinbase_receiver: Option<String>,
+    pub diff_log: Option<Vec<DiffLogPart>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DiffLogPart {
+    pub discarded_commands: DiscardedCommands,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DiscardedCommands {
+    pub insufficient_work: usize,
+    pub insufficient_space: usize,
+}
+
+impl DiscardedCommands {
+    pub fn total(&self) -> usize {
+        self.insufficient_space + self.insufficient_work
+    }
 }
 
 async fn query_block_traces(
@@ -66,14 +84,20 @@ async fn query_block_traces(
     //     .await?;
 
     // hack until we remove duplicate fields from the trace response
-    let response = query_node(
+    let res = query_node(
         client,
         url,
         STRUCTURED_TRACE_PAYLOAD.replace("{STATE_HASH}", state_hash),
     )
-    .await?
-    .text()
     .await?;
+
+    let status = res.status();
+
+    if status != StatusCode::OK {
+        return Err(AggregatorError::RpcServerError { status });
+    }
+
+    let response = res.text().await?;
 
     let raw: serde_json::Value = serde_json::from_str(&response)?;
     let res: GraphqlResponse<BlockStructuredTraceData> = serde_json::from_value(raw)?;
@@ -82,41 +106,84 @@ async fn query_block_traces(
 }
 
 pub async fn get_block_trace_from_cluster(
-    environment: &AggregatorEnvironment,
+    nodes: Nodes,
     state_hash: &str,
-) -> BTreeMap<String, BlockStructuredTrace> {
+) -> (BTreeMap<String, BlockStructuredTrace>, RequestStats) {
     let client = reqwest::Client::new();
 
-    let nodes = collect_all_urls(environment, ComponentType::Graphql);
-    let bodies = stream::iter(nodes)
-        .map(|(tag, url)| {
-            let client = client.clone();
-            let state_hash = state_hash.to_string();
-            tokio::spawn(async move {
-                (
-                    tag.clone(),
-                    query_block_traces(client, &url, &state_hash).await,
-                )
+    const MAX_RETRIES: usize = 5;
+    let mut retries: usize = 0;
+    let nodes_count = nodes.len();
+    let mut nodes_to_query = nodes;
+    let mut final_res: BTreeMap<String, BlockStructuredTrace> = BTreeMap::new();
+    let mut total_request_stats = RequestStats::default();
+
+    while retries < MAX_RETRIES {
+        let bodies = stream::iter(nodes_to_query.clone())
+            .map(|(tag, url)| {
+                let client = client.clone();
+                let state_hash = state_hash.to_string();
+                tokio::spawn(async move {
+                    (
+                        tag.clone(),
+                        query_block_traces(client, &url, &state_hash).await,
+                    )
+                })
             })
-        })
-        .buffer_unordered(150);
+            .buffer_unordered(150);
 
-    let collected: BTreeMap<String, BlockStructuredTrace> = bodies
-        .fold(
-            BTreeMap::<String, BlockStructuredTrace>::new(),
-            |mut collected, b| async {
-                match b {
-                    Ok((tag, Ok(res))) => {
-                        // info!("{url} OK");
-                        collected.insert(tag, res);
+        let (collected, timeouts, requests): (
+            BTreeMap<String, BlockStructuredTrace>,
+            usize,
+            usize,
+        ) = bodies
+            .fold(
+                (BTreeMap::<String, BlockStructuredTrace>::new(), 0, 0),
+                |(mut collected, mut timeouts, mut requests), b| async move {
+                    match b {
+                        Ok((tag, Ok(res))) => {
+                            collected.insert(tag, res);
+                        }
+                        Ok((tag, Err(e))) => {
+                            warn!("Error requestig {tag}, reason: {}", e);
+                            if let AggregatorError::OutgoingRpcError(reqwest_error) = e {
+                                if reqwest_error.is_timeout() {
+                                    timeouts += 1;
+                                }
+                            };
+                        }
+                        Err(e) => error!("Tokio join error: {e}"),
                     }
-                    Ok((tag, Err(e))) => warn!("Error requestig {tag}, reason: {}", e),
-                    Err(e) => error!("Tokio join error: {e}"),
-                }
-                collected
-            },
-        )
-        .await;
+                    requests += 1;
+                    (collected, timeouts, requests)
+                },
+            )
+            .await;
 
-    collected
+        final_res.extend(collected);
+        nodes_to_query.retain(|k: &String, _| !final_res.contains_key(k));
+        let request_stats = RequestStats {
+            request_count: requests,
+            request_timeout_count: timeouts,
+        };
+
+        total_request_stats += request_stats;
+
+        if nodes_to_query.is_empty() {
+            break;
+        }
+
+        sleep(Duration::from_secs(1)).await;
+        retries += 1;
+    }
+
+    // info!("Timeouts: {total_timeouts}");
+    info!(
+        "Collected {}/{} traces - Timeouts: {}",
+        final_res.len(),
+        nodes_count,
+        total_request_stats.request_timeout_count,
+    );
+
+    (final_res, total_request_stats)
 }

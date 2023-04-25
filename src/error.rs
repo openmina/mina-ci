@@ -1,3 +1,4 @@
+use reqwest::StatusCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -22,4 +23,7 @@ pub enum AggregatorError {
 
     #[error("IO Error, reason: {0}")]
     IoError(#[from] std::io::Error),
+
+    #[error("Server responed with status code: {status}")]
+    RpcServerError { status: StatusCode },
 }

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     aggregators::{AggregatedBlockTraces, BlockHash, CpnpBlockPublication},
     cross_validation::ValidationReport,
-    nodes::RequestStats,
+    nodes::{GlobalSlot, RequestStats},
 };
 
 pub type IpcAggregatorStorage = BTreeMap<usize, BTreeMap<BlockHash, CpnpBlockPublication>>;
@@ -289,7 +289,7 @@ pub struct BuildStorageDump {
 pub struct BlockSummary {
     pub height: usize,
     pub block_hash: String,
-    pub global_slot: Option<String>,
+    pub global_slot: Option<GlobalSlot>,
     pub tx_count: Option<usize>,
     pub max_receive_latency: f64,
     pub date_time: Option<f64>,

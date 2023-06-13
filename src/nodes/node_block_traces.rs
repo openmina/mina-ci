@@ -49,7 +49,7 @@ pub struct BlockStructuredTraceCheckpoint {
 pub struct BlockStructuredTraceMetadata {
     pub proof_count: Option<usize>,
     pub txn_count: Option<usize>,
-    pub global_slot: Option<String>,
+    pub global_slot: Option<GlobalSlot>,
     pub creator: Option<String>,
     pub winner: Option<String>,
     pub coinbase_receiver: Option<String>,
@@ -71,6 +71,15 @@ impl DiscardedCommands {
     pub fn total(&self) -> usize {
         self.insufficient_space + self.insufficient_work
     }
+}
+
+// pub type GlobalSlot = Vec<String>;
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(untagged)]
+pub enum GlobalSlot {
+    Legacy(String),
+    Tagged(Vec<String>),
 }
 
 async fn query_block_traces(

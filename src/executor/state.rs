@@ -68,7 +68,7 @@ pub async fn poll_drone(
 
                 // TODO: optimize this part
                 // TODO: REENABLE THIS!!
-                let is_cluster_ready = is_deployment_ready(build.number).await;
+                let is_cluster_ready = is_deployment_ready(build.number, environment).await;
                 // let is_cluster_ready = true;
                 if let Ok(mut write_locked_state) = state.write() {
                     write_locked_state.is_cluster_ready = is_cluster_ready;
@@ -80,16 +80,21 @@ pub async fn poll_drone(
                     write_locked_state.enable_aggregation = is_ready;
                 }
             }
-            Err(_) => {
-                // println!("Can't query drone CI: {}", e);
+            Err(e) => {
+                println!("Can't query drone CI: {}", e);
                 continue;
             }
         }
     }
 }
 
-pub async fn query_latest_build(environment: &AggregatorEnvironment) -> AggregatorResult<BuildInfo> {
-    let url = format!("{}/repos/openmina/{}/builds?per_page=1", environment.ci_api_url, environment.ci_repo);
+pub async fn query_latest_build(
+    environment: &AggregatorEnvironment,
+) -> AggregatorResult<BuildInfo> {
+    let url = format!(
+        "{}/repos/{}/builds?per_page=1",
+        environment.ci_api_url, environment.ci_repo
+    );
     let client = reqwest::Client::new();
 
     let res: Vec<BuildInfo> = client
@@ -103,8 +108,8 @@ pub async fn query_latest_build(environment: &AggregatorEnvironment) -> Aggregat
     Ok(res.get(0).cloned().unwrap_or_default())
 }
 
-pub async fn is_deployment_ready(build_number: usize) -> bool {
-    match query_deploy_step(build_number).await {
+pub async fn is_deployment_ready(build_number: usize, environment: &AggregatorEnvironment) -> bool {
+    match query_deploy_step(build_number, environment).await {
         Ok(build_info) => {
             // if the build has any other status than running, return false
             // NOTE: we don't want to collect data once the tests finished (the testnet is only restarted on the next run)
@@ -130,10 +135,13 @@ pub async fn is_deployment_ready(build_number: usize) -> bool {
     }
 }
 
-pub async fn query_deploy_step(build_number: usize) -> AggregatorResult<BuildInfoExpanded> {
+pub async fn query_deploy_step(
+    build_number: usize,
+    environment: &AggregatorEnvironment,
+) -> AggregatorResult<BuildInfoExpanded> {
     let url = format!(
-        "https://ci.openmina.com/api/repos/openmina/mina/builds/{}",
-        build_number
+        "{}/repos/{}/builds/{}",
+        environment.ci_api_url, environment.ci_repo, build_number
     );
     let client = reqwest::Client::new();
 

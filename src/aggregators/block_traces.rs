@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    nodes::{BlockStructuredTrace, DaemonMetrics, DaemonStatusDataSlim, TraceSource, TraceStatus},
+    nodes::{
+        BlockStructuredTrace, DaemonMetrics, DaemonStatusDataSlim, GlobalSlot, TraceSource,
+        TraceStatus,
+    },
     storage::{BlockSummary, PeerTiming},
     AggregatorResult,
 };
@@ -210,7 +213,7 @@ pub struct BlockTraceAggregatorReport {
     pub block_application: Option<f64>,
     pub is_producer: bool,
     pub block_producer: Option<String>,
-    pub global_slot: Option<String>,
+    pub global_slot: Option<GlobalSlot>,
     #[serde(skip)]
     pub included_tranasction_count: Option<usize>,
 }

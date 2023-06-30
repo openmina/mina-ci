@@ -5,7 +5,7 @@ use std::{
 };
 
 use tokio::time::sleep;
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     config::AggregatorEnvironment,
@@ -16,7 +16,7 @@ use crate::{
 
 pub type AggregatorState = Arc<RwLock<AggregatorStateInner>>;
 
-const DEPLOY_PIPELINE_NAME: &str = "deploy-to-cluster-custom";
+const DEPLOY_PIPELINE_NAMES: [&str; 2] = ["deploy-to-cluster-custom", "deploy-to-cluster"];
 const DEPLOY_STEP_NAME: &str = "deploy-nodes";
 
 #[derive(Debug, Default, Clone)]
@@ -97,41 +97,44 @@ pub async fn query_latest_build(
     );
     let client = reqwest::Client::new();
 
-    let res: Vec<BuildInfo> = client
-        .get(url)
-        .bearer_auth("26e2399a1f9f336286eabe5e2bb6c2ba")
-        .send()
-        .await?
-        .json()
-        .await?;
+    let res: Vec<BuildInfo> = client.get(url).send().await?.json().await?;
 
     Ok(res.get(0).cloned().unwrap_or_default())
 }
 
+#[instrument(skip(environment))]
 pub async fn is_deployment_ready(build_number: usize, environment: &AggregatorEnvironment) -> bool {
     match query_deploy_step(build_number, environment).await {
         Ok(build_info) => {
             // if the build has any other status than running, return false
             // NOTE: we don't want to collect data once the tests finished (the testnet is only restarted on the next run)
             if build_info.status != *"running" {
+                debug!("The build is not running, status: {}", build_info.status);
                 return false;
             }
             let is_ready = build_info
                 .stages
                 .iter()
-                .find(|s| s.name == DEPLOY_PIPELINE_NAME)
+                .find(|s| DEPLOY_PIPELINE_NAMES.contains(&s.name.as_str()))
                 .and_then(|stage| {
+                    debug!("Deploy pipeline found");
                     stage.steps.clone().and_then(|steps| {
                         steps
                             .iter()
                             .find(|step| step.name == DEPLOY_STEP_NAME)
-                            .map(|step| step.status == *"success")
+                            .map(|step| {
+                                debug!("Deploy step found");
+                                step.status == *"success"
+                            })
                     })
                 });
             // println!("Is ready: {:?}", is_ready);
             is_ready.unwrap_or(false)
         }
-        Err(_) => false,
+        Err(e) => {
+            warn!("Failed to query drone build, reason: {e}");
+            false
+        }
     }
 }
 
@@ -145,13 +148,7 @@ pub async fn query_deploy_step(
     );
     let client = reqwest::Client::new();
 
-    let res: BuildInfoExpanded = client
-        .get(url)
-        .bearer_auth("26e2399a1f9f336286eabe5e2bb6c2ba")
-        .send()
-        .await?
-        .json()
-        .await?;
+    let res: BuildInfoExpanded = client.get(url).send().await?.json().await?;
 
     Ok(res)
 }
